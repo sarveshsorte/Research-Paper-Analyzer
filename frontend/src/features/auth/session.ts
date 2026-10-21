@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
-/** Hackathon auth stub: the only session is the no-account demo. */
 export interface Session {
-  mode: 'demo';
+  mode: 'demo' | 'google' | 'github';
+  accessToken?: string;
+  user?: { id: string; email: string; name: string; picture?: string };
 }
 
 const STORAGE_KEY = 'claimlens:session';
@@ -21,7 +22,16 @@ export function readSession(): Session | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<Session>;
-    return parsed.mode === 'demo' ? { mode: 'demo' } : null;
+    if (parsed.mode === 'demo') return { mode: 'demo' };
+    if (
+      (parsed.mode === 'google' || parsed.mode === 'github') &&
+      typeof parsed.accessToken === 'string' &&
+      parsed.user &&
+      typeof parsed.user.email === 'string'
+    ) {
+      return parsed as Session;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -38,12 +48,11 @@ function write(value: Session | null) {
 }
 
 export const startDemoSession = () => write({ mode: 'demo' });
+export const startGoogleSession = (session: Omit<Session, 'mode'>) =>
+  write({ mode: 'google', ...session });
+export const startGithubSession = (session: Omit<Session, 'mode'>) =>
+  write({ mode: 'github', ...session });
 export const endSession = () => write(null);
-
-/** Stub for the email/password and GitHub/Google buttons: accounts are not built yet. */
-export async function signIn(): Promise<{ ok: false; message: string }> {
-  return Promise.resolve({ ok: false, message: 'Accounts are coming soon — use the demo.' });
-}
 
 function subscribe(onChange: () => void) {
   window.addEventListener(CHANGE_EVENT, onChange);

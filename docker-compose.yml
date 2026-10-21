@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      APP_ENV: development
+      STORAGE_PATH: /app/storage/researchlens.sqlite3
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-Ov23liz4wXUFCGOKJ6DT}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      FRONTEND_URL: http://localhost:5174
+      BACKEND_URL: http://localhost:8001
+    ports:
+      - "8001:8000"
+    volumes:
+      - researchlens-storage:/app/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8001/api/v1
+        VITE_USE_MOCKS: "false"
+    ports:
+      - "5174:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  researchlens-storage:

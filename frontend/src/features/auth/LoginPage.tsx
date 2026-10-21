@@ -1,11 +1,26 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Logo } from '@/components/Logo';
 import { TextInput } from '@/components/TextInput';
 import { VerdictMeter } from '@/components/VerdictMeter';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import { signIn, startDemoSession } from './session';
+import { apiFetch } from '@/api/client';
+import { env } from '@/lib/env';
+import { startDemoSession, startGithubSession, startGoogleSession } from './session';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize(options: { client_id: string; callback: (response: { credential: string }) => void }): void;
+          renderButton(element: HTMLElement, options: Record<string, string | number>): void;
+        };
+      };
+    };
+  }
+}
 
 /** The decorative example result on the left panel (static markup, as in the artboard). */
 function ExampleCheck() {
@@ -40,13 +55,64 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [notice, setNotice] = useState('');
+  const googleButtonRef = useRef<HTMLDivElement>(null);
 
   const from = (location.state as { from?: Location } | null)?.from;
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('provider') !== 'github') return;
+    const accessToken = params.get('access_token');
+    const id = params.get('user_id');
+    const email = params.get('email');
+    const name = params.get('name');
+    if (!accessToken || !id || !email || !name) {
+      setNotice('GitHub sign-in response was incomplete.');
+      return;
+    }
+    startGithubSession({
+      accessToken,
+      user: { id, email, name, picture: params.get('picture') || undefined },
+    });
+    navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
+  }, [from, location.search, navigate]);
   const startDemo = () => {
     startDemoSession();
     navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
   };
-  const comingSoon = async () => setNotice((await signIn()).message);
+  const comingSoon = async () => setNotice('Use Google sign-in or the live demo.');
+  const startGithub = () => {
+    window.location.assign(`${env.apiBaseUrl}/auth/github/login`);
+  };
+  useEffect(() => {
+    if (!env.googleClientId || !googleButtonRef.current) return;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => {
+      window.google?.accounts.id.initialize({
+        client_id: env.googleClientId,
+        callback: async ({ credential }) => {
+          try {
+            const result = await apiFetch<{
+              access_token: string;
+              user: { id: string; email: string; name: string; picture?: string };
+            }>('/auth/google', { method: 'POST', body: { credential } });
+            startGoogleSession({ accessToken: result.access_token, user: result.user });
+            navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
+          } catch (error) {
+            setNotice(error instanceof Error ? error.message : 'Google sign-in failed.');
+          }
+        },
+      });
+      if (googleButtonRef.current) {
+        window.google?.accounts.id.renderButton(googleButtonRef.current, {
+          type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', width: 220,
+        });
+      }
+    };
+    document.head.appendChild(script);
+    return () => script.remove();
+  }, [from, navigate]);
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     void comingSoon();
@@ -132,12 +198,22 @@ export function LoginPage() {
           </form>
 
           <div className="grid grid-cols-2 gap-2.5">
-            <Button variant="secondary" size="field" onClick={() => void comingSoon()}>
+            <Button variant="secondary" size="field" onClick={startGithub}>
               Continue with GitHub
             </Button>
-            <Button variant="secondary" size="field" onClick={() => void comingSoon()}>
-              Continue with Google
-            </Button>
+            <div className="relative flex min-h-10 items-center justify-center overflow-hidden">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2.5 border-1.5 border-ink bg-sheet px-3 py-2 text-[15px] font-semibold text-ink"
+              >
+                Continue with Google
+              </div>
+              <div
+                ref={googleButtonRef}
+                aria-label="Continue with Google"
+                className="relative z-10 min-h-10 w-full opacity-0"
+              />
+            </div>
           </div>
 
           <p
