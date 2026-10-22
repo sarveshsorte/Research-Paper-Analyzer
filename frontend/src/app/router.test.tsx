@@ -57,7 +57,7 @@ describe('app routes', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Accounts are coming soon — use the demo.',
+      'Use Google sign-in or the live demo.',
     );
   });
 

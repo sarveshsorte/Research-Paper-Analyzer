@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createJob } from '@/mocks/db';
 import { QueryWrapper, createTestQueryClient } from '@/test/render';
+import { apiUrl } from './client';
 import { jobKey, useJobStream } from './sse';
 
 /** Minimal EventSource stand-in that tests drive by hand. */
@@ -50,7 +51,7 @@ describe('useJobStream over SSE', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const { result, client } = setup('job_1');
     const source = FakeEventSource.instances[0];
-    expect(source?.url).toBe('http://localhost:8000/api/v1/jobs/job_1/stream');
+    expect(source?.url).toBe(apiUrl('/jobs/job_1/stream'));
     expect(result.current.status).toBe('running');
 
     act(() => source?.emit('step', { type: 'searching', message: 'Searched arXiv', t: 2.4 }));

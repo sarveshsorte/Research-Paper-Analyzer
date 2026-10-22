@@ -2,13 +2,23 @@ import { readSession } from '@/features/auth/session';
 import { env } from '@/lib/env';
 
 export type ApiErrorCode =
-  | 'INVALID_REQUEST' | 'NOT_FOUND' | 'DOCUMENT_NOT_READY' | 'FILE_TOO_LARGE'
-  | 'UNSUPPORTED_TYPE' | 'RATE_LIMITED' | 'UPSTREAM_ERROR' | 'INTERNAL_ERROR'
+  | 'INVALID_REQUEST'
+  | 'NOT_FOUND'
+  | 'DOCUMENT_NOT_READY'
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_TYPE'
+  | 'RATE_LIMITED'
+  | 'UPSTREAM_ERROR'
+  | 'INTERNAL_ERROR'
   | 'NETWORK_ERROR';
 
 const CODE_BY_STATUS: Record<number, ApiErrorCode> = {
-  400: 'INVALID_REQUEST', 404: 'NOT_FOUND', 409: 'DOCUMENT_NOT_READY',
-  413: 'FILE_TOO_LARGE', 415: 'UNSUPPORTED_TYPE', 429: 'RATE_LIMITED',
+  400: 'INVALID_REQUEST',
+  404: 'NOT_FOUND',
+  409: 'DOCUMENT_NOT_READY',
+  413: 'FILE_TOO_LARGE',
+  415: 'UNSUPPORTED_TYPE',
+  429: 'RATE_LIMITED',
   502: 'UPSTREAM_ERROR',
 };
 
@@ -26,14 +36,21 @@ export class ApiError extends Error {
 function isErrorBody(value: unknown): value is { error: { code: string; message: string } } {
   if (typeof value !== 'object' || value === null || !('error' in value)) return false;
   const error = value.error;
-  return typeof error === 'object' && error !== null &&
+  return (
+    typeof error === 'object' &&
+    error !== null &&
     typeof (error as { code?: unknown }).code === 'string' &&
-    typeof (error as { message?: unknown }).message === 'string';
+    typeof (error as { message?: unknown }).message === 'string'
+  );
 }
 
 export function toApiError(status: number, body: unknown): ApiError {
   if (isErrorBody(body)) return new ApiError(body.error.code, body.error.message, status);
-  return new ApiError(CODE_BY_STATUS[status] ?? 'INTERNAL_ERROR', `Request failed (${status}).`, status);
+  return new ApiError(
+    CODE_BY_STATUS[status] ?? 'INTERNAL_ERROR',
+    `Request failed (${status}).`,
+    status,
+  );
 }
 
 export function apiUrl(path: string): string {
@@ -43,7 +60,11 @@ export function apiUrl(path: string): string {
 async function readBody(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return undefined;
-  try { return JSON.parse(text) as unknown; } catch { return text; }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
 }
 
 function authHeaders(): Record<string, string> {
@@ -63,8 +84,12 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   let response: Response;
   try {
     response = await fetch(apiUrl(path), {
-      method, signal,
-      headers: { ...authHeaders(), ...(body === undefined || isForm ? {} : { 'Content-Type': 'application/json' }) },
+      method,
+      signal,
+      headers: {
+        ...authHeaders(),
+        ...(body === undefined || isForm ? {} : { 'Content-Type': 'application/json' }),
+      },
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   } catch (error) {
@@ -88,7 +113,11 @@ export async function apiFetchBytes(path: string, signal?: AbortSignal): Promise
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export function apiUpload<T>(path: string, form: FormData, onProgress?: (percent: number) => void): Promise<T> {
+export function apiUpload<T>(
+  path: string,
+  form: FormData,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', apiUrl(path));
@@ -99,12 +128,18 @@ export function apiUpload<T>(path: string, form: FormData, onProgress?: (percent
     };
     xhr.onload = () => {
       let data: unknown;
-      try { data = xhr.responseText ? (JSON.parse(xhr.responseText) as unknown) : undefined; }
-      catch { data = xhr.responseText; }
-      if (xhr.status >= 200 && xhr.status < 300) { onProgress?.(100); resolve(data as T); }
-      else reject(toApiError(xhr.status, data));
+      try {
+        data = xhr.responseText ? (JSON.parse(xhr.responseText) as unknown) : undefined;
+      } catch {
+        data = xhr.responseText;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve(data as T);
+      } else reject(toApiError(xhr.status, data));
     };
-    xhr.onerror = () => reject(new ApiError('NETWORK_ERROR', 'Could not reach the ClaimLens server.', 0));
+    xhr.onerror = () =>
+      reject(new ApiError('NETWORK_ERROR', 'Could not reach the ClaimLens server.', 0));
     xhr.send(form);
   });
 }

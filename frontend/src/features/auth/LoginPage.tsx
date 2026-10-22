@@ -55,7 +55,7 @@ export function LoginPage() {
     startDemoSession();
     navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
   };
-  const comingSoon = async () => setNotice('Use Google sign-in or the live demo.');
+  const comingSoon = () => setNotice('Use Google sign-in or the live demo.');
   const startGithub = () => {
     window.location.assign(`${env.apiBaseUrl}/auth/github/login`);
   };
@@ -64,20 +64,23 @@ export function LoginPage() {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
+    const finishGoogleSignIn = async (credential: string) => {
+      try {
+        const result = await apiFetch<{
+          access_token: string;
+          user: { id: string; email: string; name: string; picture?: string };
+        }>('/auth/google', { method: 'POST', body: { credential } });
+        startGoogleSession({ accessToken: result.access_token, user: result.user });
+        navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'Google sign-in failed.');
+      }
+    };
     script.onload = () => {
       window.google?.accounts.id.initialize({
         client_id: env.googleClientId,
-        callback: async ({ credential }) => {
-          try {
-            const result = await apiFetch<{
-              access_token: string;
-              user: { id: string; email: string; name: string; picture?: string };
-            }>('/auth/google', { method: 'POST', body: { credential } });
-            startGoogleSession({ accessToken: result.access_token, user: result.user });
-            navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
-          } catch (error) {
-            setNotice(error instanceof Error ? error.message : 'Google sign-in failed.');
-          }
+        callback: ({ credential }) => {
+          void finishGoogleSignIn(credential);
         },
       });
       if (googleButtonRef.current) {
