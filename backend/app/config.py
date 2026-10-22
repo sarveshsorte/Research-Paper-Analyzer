@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,9 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_model: str | None = None
     embedding_dimension: int = 2048
+    # NVIDIA retrieval embedders need input_type (query/passage); "auto" sends it
+    # when the embedding URL is on nvidia.com.
+    embedding_input_type: Literal["auto", "on", "off"] = "auto"
 
     reranker_base_url: str | None = None
     reranker_api_key: str | None = None
@@ -45,6 +49,18 @@ class Settings(BaseSettings):
     # git. When the path is unset, Google Application Default Credentials are used.
     firebase_credentials_path: str | None = None
     firebase_project_id: str | None = None
+
+    # Claim checks: paper search and open-access PDF downloads.
+    semantic_scholar_api_key: str | None = None
+    tavily_api_key: str | None = None
+    # Extra hosts (comma-separated) PDFs may be downloaded from.
+    download_allowed_hosts: str = ""
+
+    # Background work. The API runs as one process; jobs run inside it.
+    job_concurrency: int = Field(default=2, ge=1, le=16)
+    job_timeout_seconds: int = Field(default=180, ge=10)
+    check_timeout_seconds: int = Field(default=600, ge=30)
+    process_concurrency: int = Field(default=2, ge=1, le=16)
 
     model_config = SettingsConfigDict(
         env_file=(

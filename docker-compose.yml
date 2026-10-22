@@ -5,7 +5,19 @@ services:
       dockerfile: docker/backend.Dockerfile
     environment:
       APP_ENV: development
+      # The database and the BM25 index live in the named volume.
       STORAGE_PATH: /app/storage/researchlens.sqlite3
+      BM25_INDEX_PATH: /app/storage/bm25/index.sqlite3
+      # Model and search keys come from the root .env (git-ignored).
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-2048}
+      NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-https://api.tokenfactory.us-central1.nebius.com/v1/}
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
+      NEBIUS_MODEL: ${NEBIUS_MODEL:-}
+      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       # The Firebase service-account JSON goes in ./secrets (git-ignored).
       FIREBASE_CREDENTIALS_PATH: /app/secrets/firebase-service-account.json
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}

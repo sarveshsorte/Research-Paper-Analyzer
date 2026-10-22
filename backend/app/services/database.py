@@ -69,6 +69,26 @@ MIGRATIONS: tuple[str, ...] = (
         PRIMARY KEY (job_id, seq)
     );
     """,
+    # 3: chunk vectors live here instead of a separate vector database; papers
+    # found by search keep their authors and year; uploads are deduplicated by
+    # content hash per owner.
+    """
+    ALTER TABLE documents ADD COLUMN authors TEXT;
+    ALTER TABLE documents ADD COLUMN year INTEGER;
+    ALTER TABLE documents ADD COLUMN sha256 TEXT;
+    CREATE INDEX documents_by_owner_hash ON documents(owner_uid, sha256);
+    CREATE INDEX documents_by_owner_url ON documents(owner_uid, url);
+
+    CREATE TABLE chunk_vectors (
+        chunk_id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL
+            REFERENCES documents(document_id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        dimension INTEGER NOT NULL,
+        vector BLOB NOT NULL
+    );
+    CREATE INDEX chunk_vectors_by_document ON chunk_vectors(document_id, model);
+    """,
 )
 
 SCHEMA_VERSION = len(MIGRATIONS)

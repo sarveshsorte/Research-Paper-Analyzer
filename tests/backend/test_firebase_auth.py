@@ -12,6 +12,7 @@ from google.auth.exceptions import DefaultCredentialsError
 from backend.app.api.deps import get_store
 from backend.app.api.routes.auth import router
 from backend.app.config import Settings, get_settings
+from backend.app.core.errors import CODE_BY_STATUS, register_error_handlers
 from backend.app.services import firebase_auth
 from backend.app.services.runtime import RuntimeStore
 
@@ -26,6 +27,7 @@ GOOGLE_CLAIMS: dict[str, Any] = {
 
 def make_client(settings: Settings, store: RuntimeStore) -> TestClient:
     app = FastAPI()
+    register_error_handlers(app)
     app.include_router(router)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_store] = lambda: store
@@ -121,7 +123,9 @@ def test_missing_token_is_unauthorized(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
-    assert response.json() == {"detail": "Sign in to continue."}
+    assert response.json() == {
+        "error": {"code": "UNAUTHENTICATED", "message": "Sign in to continue."}
+    }
 
 
 @pytest.mark.parametrize(
@@ -164,7 +168,9 @@ def test_verification_failures(
     )
 
     assert response.status_code == status
-    assert response.json() == {"detail": detail}
+    assert response.json() == {
+        "error": {"code": CODE_BY_STATUS[status], "message": detail}
+    }
 
 
 def test_missing_service_account_file_is_not_configured(
@@ -180,5 +186,8 @@ def test_missing_service_account_file_is_not_configured(
 
     assert response.status_code == 503
     assert response.json() == {
-        "detail": "Firebase sign-in is not configured on the server."
+        "error": {
+            "code": "SERVICE_UNAVAILABLE",
+            "message": "Firebase sign-in is not configured on the server.",
+        }
     }

@@ -1,17 +1,15 @@
 """Documents, chunks and jobs over HTTP belong to the caller's Firebase uid."""
 
-import asyncio
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from conftest import finished_job, make_app, wait_for
 from fastapi.testclient import TestClient
 from firebase_admin import auth
 
-from backend.app.api.deps import get_store
 from backend.app.api.routes import documents, jobs, workflows
-from backend.app.config import Settings, get_settings
+from backend.app.config import Settings
 from backend.app.services import firebase_auth
 from backend.app.services.runtime import RuntimeStore
 
@@ -24,20 +22,9 @@ def as_user(uid: str) -> dict[str, str]:
 
 
 @pytest.fixture
-def background(monkeypatch: pytest.MonkeyPatch) -> list[Coroutine[Any, Any, None]]:
-    """Collects background work so a test can run it to completion."""
-    pending: list[Coroutine[Any, Any, None]] = []
-    monkeypatch.setattr(documents, "run_in_background", pending.append)
-    monkeypatch.setattr(workflows, "run_in_background", pending.append)
-    return pending
-
-
-@pytest.fixture
 def client(
-    store: RuntimeStore,
-    monkeypatch: pytest.MonkeyPatch,
-    background: list[Coroutine[Any, Any, None]],  # no real background tasks
-) -> TestClient:
+    settings: Settings, store: RuntimeStore, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[TestClient]:
     def verify_id_token(token: str, **_: Any) -> dict[str, Any]:
         if token == "bad":
             raise auth.InvalidIdTokenError("bad")
@@ -49,26 +36,13 @@ def client(
 
     monkeypatch.setattr(firebase_auth, "_firebase_app", lambda *_: object())
     monkeypatch.setattr(auth, "verify_id_token", verify_id_token)
-    app = FastAPI()
-    for module in (documents, jobs, workflows):
-        app.include_router(module.router)
-    app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        _env_file=None, firebase_project_id="claimlens-test"
-    )
-    return TestClient(app)
-
-
-def run_background(pending: list[Coroutine[Any, Any, None]]) -> None:
-    while pending:
-        asyncio.run(pending.pop(0))
+    app = make_app(settings, store, documents.router, jobs.router, workflows.router)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def test_an_upload_belongs_to_the_uploader(
-    client: TestClient,
-    background: list[Coroutine[Any, Any, None]],
-    paper_pdf: bytes,
-    store: RuntimeStore,
+    client: TestClient, paper_pdf: bytes, store: RuntimeStore
 ) -> None:
     response = client.post(
         "/api/v1/upload",
@@ -77,12 +51,13 @@ def test_an_upload_belongs_to_the_uploader(
     )
     assert response.status_code == 202
     document_id = response.json()[0]["document_id"]
-    run_background(background)
 
-    listed = client.get("/api/v1/documents", headers=as_user("ada")).json()
-    assert [(doc["document_id"], doc["status"]) for doc in listed] == [
-        (document_id, "ready")
-    ]
+    def ready() -> list[dict]:
+        listed = client.get("/api/v1/documents", headers=as_user("ada")).json()
+        return listed if listed and listed[0]["status"] == "ready" else []
+
+    listed = wait_for(ready)
+    assert [doc["document_id"] for doc in listed] == [document_id]
     assert client.get("/api/v1/documents", headers=as_user("grace")).json() == []
     assert client.get("/api/v1/documents", headers=DEMO).json() == []
     # The first authenticated request saved the user.
@@ -92,12 +67,12 @@ def test_an_upload_belongs_to_the_uploader(
 def test_other_callers_cannot_reach_a_document(
     client: TestClient,
     add_user: Callable[[str], None],
-    add_ready_document: Callable[[str | None], str],
+    add_ready_document: Callable[..., str],
     store: RuntimeStore,
 ) -> None:
     add_user("ada")
     document_id = add_ready_document("ada")
-    chunk_id = store.search("adapters", [document_id])[0]["chunk_id"]
+    chunk_id = store.first_chunks(document_id, 1)[0].chunk_id
     paths = [
         f"/api/v1/documents/{document_id}",
         f"/api/v1/documents/{document_id}/file",
@@ -106,7 +81,9 @@ def test_other_callers_cannot_reach_a_document(
 
     for headers in (as_user("grace"), DEMO):
         for path in paths:
-            assert client.get(path, headers=headers).status_code == 404, path
+            response = client.get(path, headers=headers)
+            assert response.status_code == 404, path
+            assert response.json()["error"]["code"] == "NOT_FOUND"
         response = client.delete(f"/api/v1/documents/{document_id}", headers=headers)
         assert response.status_code == 404
 
@@ -117,9 +94,8 @@ def test_other_callers_cannot_reach_a_document(
 
 def test_jobs_are_private_to_their_owner(
     client: TestClient,
-    background: list[Coroutine[Any, Any, None]],
     add_user: Callable[[str], None],
-    add_ready_document: Callable[[str | None], str],
+    add_ready_document: Callable[..., str],
 ) -> None:
     add_user("ada")
     document_id = add_ready_document("ada")
@@ -131,48 +107,53 @@ def test_jobs_are_private_to_their_owner(
 
     response = client.post("/api/v1/query", json=body, headers=as_user("ada"))
     assert response.status_code == 202
-    job_id = response.json()["job_id"]
-    run_background(background)
+    job = finished_job(client, response.json()["job_id"], as_user("ada"))
 
-    job = client.get(f"/api/v1/jobs/{job_id}", headers=as_user("ada")).json()
     assert job["status"] == "done"
-    assert job["result"]["claims"][0]["evidence"][0]["document_id"] == document_id
+    evidence = job["result"]["claims"][0]["evidence"][0]
+    assert evidence["document_id"] == document_id
     for headers in (as_user("grace"), DEMO):
-        assert client.get(f"/api/v1/jobs/{job_id}", headers=headers).status_code == 404
+        response = client.get(f"/api/v1/jobs/{job['job_id']}", headers=headers)
+        assert response.status_code == 404
     # EventSource sends no token, so a signed-in user's stream is a 404 (the
     # frontend then polls GET /jobs/{id} with the token).
-    assert client.get(f"/api/v1/jobs/{job_id}/stream").status_code == 404
+    assert client.get(f"/api/v1/jobs/{job['job_id']}/stream").status_code == 404
 
 
 def test_a_demo_job_streams_its_steps_and_result(
-    client: TestClient, add_ready_document: Callable[[str | None], str]
+    client: TestClient, add_ready_document: Callable[..., str]
 ) -> None:
-    ids = [add_ready_document(None), add_ready_document(None)]
-    response = client.post("/api/v1/compare", json={"document_ids": ids})
-    job_id = response.json()["job_id"]
+    ids = [add_ready_document(None), add_ready_document(None, name="other.pdf")]
+    job_id = client.post("/api/v1/compare", json={"document_ids": ids}).json()["job_id"]
+    finished_job(client, job_id)
 
     stream = client.get(f"/api/v1/jobs/{job_id}/stream").text
 
     assert stream.startswith(
-        'event: step\ndata: {"type": "started", "message": "Processing request"}\n\n'
+        'event: step\ndata: {"type": "started", "message": "Processing request", '
+        '"t": 0}\n\n'
     )
+    assert '"type": "retrieving"' in stream
     assert "event: done\ndata: " in stream
-    assert '"attribute": "Title"' in stream
+    assert '"attribute": "Method"' in stream
 
 
 def test_a_claim_check_reads_only_the_callers_papers(
     client: TestClient,
     add_user: Callable[[str], None],
-    add_ready_document: Callable[[str | None], str],
+    add_ready_document: Callable[..., str],
 ) -> None:
     add_user("ada")
     document_id = add_ready_document("ada")
-    claim = {"claim": "Low-rank adapters match full fine-tuning."}
+    # Tavily has no key in tests, so the check falls back to the caller's library.
+    claim = {
+        "claim": "Low-rank adapters match full fine-tuning.",
+        "sources": ["tavily"],
+    }
 
     def papers(headers: dict[str, str]) -> list[str]:
         response = client.post("/api/v1/check", json=claim, headers=headers)
-        job_id = response.json()["job_id"]
-        job = client.get(f"/api/v1/jobs/{job_id}", headers=headers).json()
+        job = finished_job(client, response.json()["job_id"], headers)
         return [paper["document_id"] for paper in job["result"]["papers"]]
 
     assert papers(as_user("ada")) == [document_id]
@@ -184,4 +165,6 @@ def test_an_invalid_token_is_unauthorized(client: TestClient) -> None:
     response = client.get("/api/v1/documents", headers=as_user("bad"))
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "The sign-in token is invalid."}
+    assert response.json() == {
+        "error": {"code": "UNAUTHENTICATED", "message": "The sign-in token is invalid."}
+    }

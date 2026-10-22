@@ -24,7 +24,14 @@ def test_a_new_database_is_created_at_the_latest_version(tmp_path: Path) -> None
     assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     rows = connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {row[0] for row in rows}
-    assert {"users", "documents", "chunks", "jobs", "job_events"} <= tables
+    assert {
+        "users",
+        "documents",
+        "chunks",
+        "chunk_vectors",
+        "jobs",
+        "job_events",
+    } <= tables
 
 
 def test_an_existing_database_keeps_its_documents(tmp_path: Path) -> None:
@@ -70,30 +77,31 @@ def test_documents_are_visible_only_to_their_owner(
     assert store.get_document(ada_doc, "ada") is not None
 
 
-def test_deleting_a_document_deletes_its_chunks(
+def test_deleting_a_document_deletes_its_chunks_and_vectors(
     store: RuntimeStore,
     add_user: Callable[[str], None],
-    add_ready_document: Callable[[str | None], str],
+    add_ready_document: Callable[..., str],
 ) -> None:
     add_user("ada")
     document_id = add_ready_document("ada")
-    chunk_ids = [hit["chunk_id"] for hit in store.search("adapters", [document_id])]
+    chunk_ids = [chunk.chunk_id for chunk in store.first_chunks(document_id, 10)]
     assert chunk_ids
+    assert store.vectors([document_id], "local-hashing-512")
 
     assert store.delete_document(document_id, "ada") is True
 
     assert all(store.chunk(chunk_id, "ada") is None for chunk_id in chunk_ids)
-    assert store.search("adapters", [document_id]) == []
+    assert store.vectors([document_id], "local-hashing-512") == []
 
 
 def test_chunks_follow_their_document_owner(
     store: RuntimeStore,
     add_user: Callable[[str], None],
-    add_ready_document: Callable[[str | None], str],
+    add_ready_document: Callable[..., str],
 ) -> None:
     add_user("ada")
     document_id = add_ready_document("ada")
-    chunk_id = store.search("adapters", [document_id])[0]["chunk_id"]
+    chunk_id = store.first_chunks(document_id, 1)[0].chunk_id
 
     assert store.chunk(chunk_id, "ada") is not None
     assert store.chunk(chunk_id, "grace") is None
@@ -118,7 +126,7 @@ def test_jobs_and_their_steps_survive_a_restart(
         {"answer": "Yes.", "claims": []},
     )
     assert [step for _, step in restarted.job_steps(job.job_id)] == [
-        {"type": "started", "message": "Processing request"},
+        {"type": "started", "message": "Processing request", "t": 0},
         {"type": "retrieve", "message": "Found 3 passages"},
     ]
     assert restarted.get_job(job.job_id, None) is None
@@ -136,3 +144,20 @@ def test_a_restart_fails_work_that_was_still_running(store: RuntimeStore) -> Non
     document = restarted.get_document(document_id, None)
     assert document is not None
     assert (document["status"], document["error"]) == ("failed", INTERRUPTED_UPLOAD)
+
+
+def test_uploads_are_found_again_by_hash_and_url(
+    store: RuntimeStore, add_user: Callable[[str], None]
+) -> None:
+    add_user("ada")
+    created = store.create_document(
+        "a.pdf", b"%PDF-1", "ada", sha256="abc", url="https://arxiv.org/pdf/1"
+    )
+
+    assert (
+        store.find_document("ada", sha256="abc")["document_id"]
+        == created["document_id"]
+    )
+    assert store.find_document("ada", url="https://arxiv.org/pdf/1") is not None
+    # Another caller's identical file is a different document.
+    assert store.find_document(None, sha256="abc") is None

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
@@ -10,6 +11,7 @@ from backend.app.services.runtime import Job, RuntimeStore
 
 router = APIRouter(prefix="/api/v1", tags=["jobs"])
 POLL_SECONDS = 0.25
+HEARTBEAT_SECONDS = 15
 
 
 def _job_body(job: Job) -> dict:
@@ -36,11 +38,14 @@ def _event(name: str, data: object) -> str:
 async def _events(
     store: RuntimeStore, job_id: str, owner: str | None
 ) -> AsyncIterator[str]:
+    """Replays the saved steps, then follows the job until it ends."""
     seen = 0
+    last_sent = time.monotonic()
     while True:
         job = store.get_job(job_id, owner)
         for seq, step in store.job_steps(job_id, after=seen):
             seen = seq
+            last_sent = time.monotonic()
             yield _event("step", step)
         if job is None:
             return
@@ -50,6 +55,9 @@ async def _events(
         if job.status == "done":
             yield _event("done", {"result": job.result})
             return
+        if time.monotonic() - last_sent > HEARTBEAT_SECONDS:
+            last_sent = time.monotonic()
+            yield ": heartbeat\n\n"  # keeps proxies from closing a quiet stream
         await asyncio.sleep(POLL_SECONDS)
 
 
