@@ -91,3 +91,16 @@ def current_user(
     if authorization is None:
         raise _unauthorized("Sign in to continue.")
     return verify_firebase_token(authorization.credentials, settings)
+
+
+def optional_user(
+    authorization: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FirebaseUser | None:
+    """The signed-in Firebase user, or None without a token (the demo).
+
+    A token that is sent but invalid is still a 401.
+    """
+    if authorization is None:
+        return None
+    return verify_firebase_token(authorization.credentials, settings)

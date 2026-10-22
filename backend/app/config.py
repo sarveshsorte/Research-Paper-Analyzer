@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     qdrant_collection: str = "paper_chunks"
 
     bm25_index_path: str = "storage/bm25/index.sqlite3"
+    # The backend's own SQLite database: users, documents, chunks and jobs.
+    storage_path: str = "storage/researchlens.sqlite3"
 
     embedding_base_url: str | None = None
     embedding_api_key: str | None = None

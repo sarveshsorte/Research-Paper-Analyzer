@@ -9,9 +9,11 @@ from fastapi.testclient import TestClient
 from firebase_admin import auth
 from google.auth.exceptions import DefaultCredentialsError
 
+from backend.app.api.deps import get_store
 from backend.app.api.routes.auth import router
 from backend.app.config import Settings, get_settings
 from backend.app.services import firebase_auth
+from backend.app.services.runtime import RuntimeStore
 
 GOOGLE_CLAIMS: dict[str, Any] = {
     "uid": "user-1",
@@ -22,18 +24,21 @@ GOOGLE_CLAIMS: dict[str, Any] = {
 }
 
 
-def make_client(settings: Settings) -> TestClient:
+def make_client(settings: Settings, store: RuntimeStore) -> TestClient:
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_store] = lambda: store
     return TestClient(app)
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch, store: RuntimeStore) -> TestClient:
     # Token checks are faked below, so no real Firebase app or credentials are needed.
     monkeypatch.setattr(firebase_auth, "_firebase_app", lambda *_: object())
-    return make_client(Settings(_env_file=None, firebase_project_id="claimlens-test"))
+    return make_client(
+        Settings(_env_file=None, firebase_project_id="claimlens-test"), store
+    )
 
 
 def fake_verify(
@@ -72,6 +77,18 @@ def test_returns_the_signed_in_user(
         }
     }
     assert tokens == ["id-token"]
+
+
+def test_saves_the_profile_on_sign_in(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, store: RuntimeStore
+) -> None:
+    fake_verify(monkeypatch, GOOGLE_CLAIMS)
+
+    client.get("/api/v1/auth/me", headers={"Authorization": "Bearer id-token"})
+
+    assert store.is_known_user("user-1")
+    # Documents can now be owned by the user (the foreign key needs the row).
+    assert store.create_document("a.pdf", b"%PDF", "user-1")["document_id"]
 
 
 def test_name_falls_back_to_the_email(
@@ -150,12 +167,14 @@ def test_verification_failures(
     assert response.json() == {"detail": detail}
 
 
-def test_missing_service_account_file_is_not_configured(tmp_path: Path) -> None:
+def test_missing_service_account_file_is_not_configured(
+    tmp_path: Path, store: RuntimeStore
+) -> None:
     settings = Settings(
         _env_file=None, firebase_credentials_path=str(tmp_path / "missing.json")
     )
 
-    response = make_client(settings).get(
+    response = make_client(settings, store).get(
         "/api/v1/auth/me", headers={"Authorization": "Bearer id-token"}
     )
 

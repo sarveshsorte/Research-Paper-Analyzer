@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -8,11 +11,20 @@ from backend.app.api.routes.queries import router as query_router
 from backend.app.api.routes.documents import router as document_router
 from backend.app.api.routes.jobs import router as job_router
 from backend.app.api.routes.workflows import router as workflow_router
+from backend.app.api.deps import get_store
 from backend.app.api.routes.auth import router as auth_router
 from backend.app.config import get_settings
 from backend.app.observability.logging import configure_logging
 
-app = FastAPI(title="ResearchLens Query Service", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Open (and migrate) the database before the first request.
+    get_store()
+    yield
+
+
+app = FastAPI(title="ResearchLens Query Service", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
