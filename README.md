@@ -25,24 +25,39 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt -r document
 PYTHONPATH=. .venv/bin/uvicorn backend.app.main:app --reload --port 8001
 ```
 
-Uploads are stored in a SQLite database (`STORAGE_PATH`, default
-`storage/researchlens.sqlite3`), processed in the background through
-`document_pipeline`, and become queryable only after successful extraction and
-indexing. The API exposes document, chunk, query, job, SSE, compare, and
-contradiction endpoints under `/api/v1`.
+Copy `.env.example` to `.env` and add the keys you have. The app works end to
+end without any: local embeddings stand in for NVIDIA's and answers quote the
+papers directly. With keys it uses:
 
-The database holds users, documents, chunks, jobs and job steps. It is created
-on first start and upgraded automatically when the schema changes
+- **NVIDIA API Catalog embeddings** (`EMBEDDING_*`) for semantic retrieval;
+- **NVIDIA Nemotron on Nebius Token Factory** (`NEBIUS_API_KEY`, `NEBIUS_MODEL`)
+  for answers, comparisons, conflicts and claim judgements;
+- **Semantic Scholar, arXiv and Tavily** (`TAVILY_API_KEY`, optional
+  `SEMANTIC_SCHOLAR_API_KEY`) to find open-access papers for claim checks.
+
+`GET /api/v1/health` shows which of these are active.
+
+How a paper flows: an upload (or a pasted arXiv/DOI/Semantic Scholar link, or a
+paper found by a claim check) runs through the teammates' `document_pipeline`
+(`ingest_pdf` → `embed_chunks` → `index_prepared_paper`). Chunks and their
+vectors are stored in SQLite (`STORAGE_PATH`) and the text in the pipeline's
+BM25 index (`BM25_INDEX_PATH`); no vector database server is needed. Questions
+run through the teammates' `QueryOrchestrator`; Compare, Conflicts and claim
+checks reuse the same retrieval. Every quote returned is re-checked against its
+chunk's stored text. The adapters live in `backend/app/adapters/`; the
+pipelines' own code is unchanged.
+
+The database holds users, documents, chunks, chunk vectors, jobs and job steps.
+It is created on first start and upgraded automatically when the schema changes
 (`backend/app/services/database.py`). Documents and jobs belong to the Firebase
-user who created them: a signed-in user only sees their own. Requests without
-a token are the live demo, which shares one pool of documents. Jobs survive a
+user who created them: a signed-in user only sees their own. Requests without a
+token are the live demo, which shares one pool of documents. Jobs survive a
 restart; uploads or jobs still running when the server stopped are marked
 failed. The API runs as a single process (SQLite).
 
-The current query implementation uses deterministic lexical evidence retrieval
-so the system works without an LLM. Replace the provider seam in
-`backend/app/api/routes/workflows.py` when wiring the generation model; the
-document and frontend contracts do not need to change.
+**API reference:** [`docs/api.md`](docs/api.md) lists every endpoint and every
+external API used. A Postman collection for testing them all is in
+[`docs/postman/ClaimLens.postman_collection.json`](docs/postman/ClaimLens.postman_collection.json).
 
 ### Sign-in (Firebase Authentication)
 

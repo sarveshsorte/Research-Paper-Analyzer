@@ -10,6 +10,24 @@ today, where the backend has to plug in, and what is missing. It contains no fea
   shapes in [Proposed layout](#7-proposed-folder-layout-and-python-setup) are inferred from
   Phases 3–4. Please confirm or replace them.
 
+> **Update, 2026-10-22: connected.** The backend now runs both pipelines end to end without
+> changing their code; [`api.md`](api.md) describes the result. How each gap was handled:
+>
+> - **Storage:** SQLite instead of Postgres, and instead of Qdrant. Chunk vectors live in the
+>   backend database and a backend dense retriever searches them, which also avoids G1/G2.
+> - **Retrieval:** a BM25 retriever over their index (G3) and a term + dense reranker that
+>   keeps their relevance threshold meaningful (G4).
+> - **Delete:** the adapter deletes a paper's BM25 rows itself (G5).
+> - **Compare, Conflicts and claim checks** are built in `QueryPipelineAdapter` (G6).
+> - **Progress:** trace steps come from wrapped providers (G7).
+> - **Readiness:** paper and chunk repositories backed by the database (G8).
+> - **Output and prompts:** results are mapped to §4 (G9), and a backend Nemotron generator
+>   sends a prompt that includes the JSON shape (G10).
+> - **Errors and health** follow §4 (G16), and there is one workspace, `claimlens` (G18).
+>
+> Not done yet: Tesseract in the Docker image (G15), per-user rate limits, stream tickets and
+> anonymous Firebase sign-in for the demo.
+
 ## 1. How the pipelines run today
 
 There is no CLI, notebook or script that runs either pipeline end to end. Both are libraries:
