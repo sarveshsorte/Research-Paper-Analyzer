@@ -6,14 +6,14 @@ services:
     environment:
       APP_ENV: development
       STORAGE_PATH: /app/storage/researchlens.sqlite3
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-Ov23liz4wXUFCGOKJ6DT}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      FRONTEND_URL: http://localhost:5174
-      BACKEND_URL: http://localhost:8001
+      # The Firebase service-account JSON goes in ./secrets (git-ignored).
+      FIREBASE_CREDENTIALS_PATH: /app/secrets/firebase-service-account.json
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
     ports:
       - "8001:8000"
     volumes:
       - researchlens-storage:/app/storage
+      - ./secrets:/app/secrets:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s

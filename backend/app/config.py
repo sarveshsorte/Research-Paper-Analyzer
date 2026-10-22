@@ -38,13 +38,11 @@ class Settings(BaseSettings):
     max_question_length: int = Field(default=4000, ge=100, le=20000)
     max_papers_per_query: int = Field(default=20, ge=1, le=100)
     use_fake_providers: bool | None = None
-    google_client_id: str | None = (
-        "575187270355-7t4k12piivu4jvabsrrisfine1voipfp.apps.googleusercontent.com"
-    )
-    github_client_id: str | None = "Ov23liz4wXUFCGOKJ6DT"
-    github_client_secret: str | None = None
-    frontend_url: str = "http://localhost:5174"
-    backend_url: str = "http://localhost:8001"
+
+    # Firebase Authentication. The service-account JSON is a secret: keep it out of
+    # git. When the path is unset, Google Application Default Credentials are used.
+    firebase_credentials_path: str | None = None
+    firebase_project_id: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=(
