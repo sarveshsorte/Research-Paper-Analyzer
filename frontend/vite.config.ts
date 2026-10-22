@@ -51,7 +51,7 @@ export default defineConfig({
   // Pre-bundle the lazily imported viewer and mock worker at startup. Otherwise Vite discovers
   // them on first use and reloads the page, losing in-memory state (e.g. the Ask history).
   optimizeDeps: {
-    include: ['react-pdf', 'msw/browser'],
+    include: ['react-pdf', 'msw/browser', 'firebase/app', 'firebase/auth'],
   },
   test: {
     environment: 'jsdom',

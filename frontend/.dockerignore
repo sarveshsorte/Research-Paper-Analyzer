@@ -1,0 +1,7 @@
+# The image installs its own dependencies; local .env files stay out of it.
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example

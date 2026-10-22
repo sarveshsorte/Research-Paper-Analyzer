@@ -51,14 +51,12 @@ describe('app routes', () => {
     expect(router.state.location.pathname).toBe('/library');
   });
 
-  it('answers the sign-in stub inline, not with an alert', async () => {
+  it('answers sign-in problems inline, not with an alert', async () => {
     const user = userEvent.setup();
     renderApp('/login', { signedIn: false });
 
     await user.click(await screen.findByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Use Google sign-in or the live demo.',
-    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Enter your email and password.');
   });
 
   it('signs out from the account menu', async () => {
