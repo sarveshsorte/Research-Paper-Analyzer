@@ -25,10 +25,19 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt -r document
 PYTHONPATH=. .venv/bin/uvicorn backend.app.main:app --reload --port 8001
 ```
 
-Uploads are stored in `storage/researchlens.sqlite3`, processed in the
-background through `document_pipeline`, and become queryable only after
-successful extraction and indexing. The API exposes document, chunk, query,
-job, SSE, compare, and contradiction endpoints under `/api/v1`.
+Uploads are stored in a SQLite database (`STORAGE_PATH`, default
+`storage/researchlens.sqlite3`), processed in the background through
+`document_pipeline`, and become queryable only after successful extraction and
+indexing. The API exposes document, chunk, query, job, SSE, compare, and
+contradiction endpoints under `/api/v1`.
+
+The database holds users, documents, chunks, jobs and job steps. It is created
+on first start and upgraded automatically when the schema changes
+(`backend/app/services/database.py`). Documents and jobs belong to the Firebase
+user who created them: a signed-in user only sees their own. Requests without
+a token are the live demo, which shares one pool of documents. Jobs survive a
+restart; uploads or jobs still running when the server stopped are marked
+failed. The API runs as a single process (SQLite).
 
 The current query implementation uses deterministic lexical evidence retrieval
 so the system works without an LLM. Replace the provider seam in
