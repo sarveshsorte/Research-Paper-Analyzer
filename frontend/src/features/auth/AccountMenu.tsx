@@ -35,7 +35,7 @@ export function AccountMenu() {
 
   const signOut = () => {
     endSession();
-    navigate('/login', { replace: true });
+    navigate('/welcome', { replace: true });
   };
 
   return (

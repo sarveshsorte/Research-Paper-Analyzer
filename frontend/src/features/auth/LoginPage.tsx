@@ -3,10 +3,10 @@ import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Logo } from '@/components/Logo';
 import { TextInput } from '@/components/TextInput';
-import { VerdictMeter } from '@/components/VerdictMeter';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { apiFetch } from '@/api/client';
 import { env } from '@/lib/env';
+import { ExampleCheck } from './ExampleCheck';
 import { startDemoSession, startGithubSession, startGoogleSession } from './session';
 
 declare global {
@@ -14,39 +14,15 @@ declare global {
     google?: {
       accounts: {
         id: {
-          initialize(options: { client_id: string; callback: (response: { credential: string }) => void }): void;
+          initialize(options: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+          }): void;
           renderButton(element: HTMLElement, options: Record<string, string | number>): void;
         };
       };
     };
   }
-}
-
-/** The decorative example result on the left panel (static markup, as in the artboard). */
-function ExampleCheck() {
-  return (
-    <figure
-      aria-label="Example check"
-      className="flex max-w-[567px] -rotate-[1.2deg] flex-col gap-3.5 border-1.5 border-sheet bg-sheet px-[22px] py-5 text-ink"
-    >
-      <div className="flex justify-between font-mono text-[11px] uppercase tracking-[0.6px] text-muted">
-        <span>Check #0042</span>
-        <span>6 papers · 21s</span>
-      </div>
-      <p className="font-display text-[22px] font-bold leading-[1.2]">
-        “LoRA matches full fine-tuning on math and coding.”
-      </p>
-      <VerdictMeter supports={3} partial={1} contradicts={2} size="sm" />
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[12px] text-muted">
-          3 support · 1 partial · 2 contradict
-        </span>
-        <span className="-rotate-[4deg] border-2 border-contra px-2 py-0.5 font-mono text-[12px] font-semibold uppercase tracking-[1px] text-contra">
-          Contested
-        </span>
-      </div>
-    </figure>
-  );
 }
 
 /** /login (artboard "00 · Sign in"). Accounts are stubbed; the demo starts a session. */
@@ -106,7 +82,11 @@ export function LoginPage() {
       });
       if (googleButtonRef.current) {
         window.google?.accounts.id.renderButton(googleButtonRef.current, {
-          type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', width: 220,
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          width: 220,
         });
       }
     };
@@ -126,7 +106,7 @@ export function LoginPage() {
         aria-label="About ClaimLens"
         className="graph-paper-ink hidden min-w-0 flex-[1_1_732px] flex-col gap-10 px-14 py-10 text-on-ink min-[900px]:flex"
       >
-        <Logo onInk />
+        <Logo onInk to="/welcome" />
         <div className="flex max-w-[620px] flex-grow flex-col justify-center gap-7">
           <h1 className="font-display text-[64px] font-extrabold leading-[0.98] tracking-[-2px]">
             Don’t trust the claim.
@@ -152,7 +132,7 @@ export function LoginPage() {
       >
         <div className="flex w-full max-w-[420px] flex-col gap-6">
           <div className="flex flex-col gap-6 min-[900px]:hidden">
-            <Logo />
+            <Logo to="/welcome" />
             <h1 className="sr-only">ClaimLens: don’t trust the claim, read the evidence.</h1>
           </div>
           <div className="flex flex-col gap-2">
