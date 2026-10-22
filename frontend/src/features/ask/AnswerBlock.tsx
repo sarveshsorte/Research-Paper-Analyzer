@@ -118,7 +118,13 @@ export function AnswerBlock({ entry, scope, first, onOpen, onSettled, onRetry }:
                       onClick={(event: MouseEvent<HTMLButtonElement>) => {
                         if (!doc) return;
                         onOpen(
-                          { doc, page: evidence?.page ?? 1, chunk: evidence?.chunk_id, n: part.n },
+                          {
+                            doc,
+                            page: evidence?.page ?? 1,
+                            chunk: evidence?.chunk_id,
+                            n: part.n,
+                            quote: evidence?.quote,
+                          },
                           event.currentTarget,
                         );
                       }}

@@ -55,7 +55,7 @@ export function EvidenceViewer({
   const pages = pageCount ?? detail.data?.pages;
   const citedPage = chunk.data?.page ?? target.page;
   const onCitedPage = target.page === citedPage;
-  const quote = onCitedPage ? chunk.data?.text : undefined;
+  const quote = onCitedPage ? (target.quote ?? chunk.data?.text) : undefined;
   const matchKey = `${target.doc}:${target.page}:${target.chunk ?? ''}`;
   const matchKind = match?.key === matchKey ? match.kind : undefined;
 
