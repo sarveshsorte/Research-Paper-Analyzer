@@ -992,7 +992,11 @@ class QueryPipelineAdapter:
             )
         parts = []
         if supports:
-            parts.append(f"{supports} passage{'s' if supports != 1 else ''} support it")
+            parts.append(
+                "1 passage supports it"
+                if supports == 1
+                else f"{supports} passages support it"
+            )
         if contradicts:
             parts.append(
                 f"{contradicts} contradict{'s' if contradicts == 1 else ''} it"

@@ -261,3 +261,12 @@ def test_claim_check_searches_downloads_indexes_and_judges(
     assert "arXiv unavailable — arXiv returned 503." in messages
     assert "Skipped Tavily — no API key configured" in messages
     assert "Downloaded 2 open-access PDFs" in messages
+
+
+def test_health_says_when_the_firebase_key_file_is_missing(tmp_path) -> None:
+    assert health._firebase_status(str(tmp_path / "missing.json")) == (
+        "credentials file missing"
+    )
+    key = tmp_path / "firebase-service-account.json"
+    key.write_text("{}")
+    assert health._firebase_status(str(key)) == "configured"

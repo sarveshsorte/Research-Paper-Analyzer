@@ -9,6 +9,14 @@ router = APIRouter(tags=["health"])
 VERSION = "0.2.0"
 
 
+def _firebase_status(credentials_path: str | None) -> str:
+    """Whether the service-account key the backend needs is actually there."""
+    path = credentials_path or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if not path:
+        return "not configured"
+    return "configured" if Path(path).is_file() else "credentials file missing"
+
+
 def _check(run) -> str:
     try:
         return run()
@@ -59,12 +67,7 @@ async def health(request: Request) -> dict:
         else "public",
         "arxiv": "public",
         "tavily": "configured" if settings.tavily_api_key else "not configured",
-        "firebase": (
-            "configured"
-            if settings.firebase_credentials_path
-            or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            else "not configured"
-        ),
+        "firebase": _firebase_status(settings.firebase_credentials_path),
     }
     healthy = checks["database"] == "ok" and checks["bm25_index"] == "ok"
     return {
