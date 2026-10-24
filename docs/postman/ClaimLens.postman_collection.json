@@ -1,0 +1,684 @@
+{
+  "info": {
+    "_postman_id": "6f5d3c1e-6c1b-4d61-9c3e-2b7a1f0c9a10",
+    "name": "ClaimLens API",
+    "description": "Every endpoint of the ClaimLens FastAPI backend (base `{{apiUrl}}` = `{{baseUrl}}/api/v1`).\n\n**Run order:** Health → Documents › Upload (pick two PDFs in the Body tab) → Documents › Get one document (repeat until `ready`) → Analysis jobs › any POST → Analysis jobs › Get job (repeat until `done`).\n\n**Auth:** requests send `Authorization: Bearer {{idToken}}`. Leave `idToken` empty to use the account-free demo. To act as a Firebase user, set `firebaseApiKey` (the web app's `VITE_FIREBASE_API_KEY`), `firebaseEmail` and `firebasePassword`, then run Auth › Firebase sign-in; it stores the ID token (valid for one hour).\n\nErrors always look like `{\"error\": {\"code\": \"...\", \"message\": \"...\"}}`. See docs/api.md for every field.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{idToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8001"
+    },
+    {
+      "key": "apiUrl",
+      "value": "{{baseUrl}}/api/v1"
+    },
+    {
+      "key": "idToken",
+      "value": ""
+    },
+    {
+      "key": "firebaseApiKey",
+      "value": ""
+    },
+    {
+      "key": "firebaseEmail",
+      "value": ""
+    },
+    {
+      "key": "firebasePassword",
+      "value": ""
+    },
+    {
+      "key": "documentId",
+      "value": ""
+    },
+    {
+      "key": "documentId2",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    },
+    {
+      "key": "chunkId",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Every error response uses the contract's shape.",
+          "if (pm.response.code >= 400 && pm.response.headers.get('Content-Type')?.includes('json')) {",
+          "  pm.test('error body is {error: {code, message}}', () => {",
+          "    const body = pm.response.json();",
+          "    pm.expect(body.error.code).to.be.a('string');",
+          "    pm.expect(body.error.message).to.be.a('string');",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 ok', () => pm.expect(pm.response.json()).to.eql({ status: 'ok' }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health and configured services",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/health",
+            "description": "`{status, version, mock_ai, checks}`. `mock_ai` is true while a local fallback stands in for NVIDIA embeddings or Nemotron."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status, version, mock_ai', () => {",
+                  "  pm.expect(body).to.have.keys('status', 'version', 'mock_ai', 'checks');",
+                  "  pm.expect(body.checks.database).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth (Firebase)",
+      "item": [
+        {
+          "name": "Firebase sign-in (email + password) → idToken",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseApiKey}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{firebaseEmail}}\",\n  \"password\": \"{{firebasePassword}}\",\n  \"returnSecureToken\": true\n}"
+            },
+            "description": "Firebase Auth REST API. Stores the returned ID token in `idToken`, which every other request sends as a Bearer token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('signed in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('idToken', pm.response.json().idToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Firebase sign-up (create a test account) → idToken",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={{firebaseApiKey}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{firebaseEmail}}\",\n  \"password\": \"{{firebasePassword}}\",\n  \"returnSecureToken\": true\n}"
+            },
+            "description": "Needs the Email/Password provider enabled in the Firebase console."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('account created', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('idToken', pm.response.json().idToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/auth/me",
+            "description": "Verifies the Firebase ID token and returns the user. 401 without a token; 503 when the server has no Firebase service account."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('user', () => pm.expect(pm.response.json().user.id).to.be.a('string'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid token → 401",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-real-token",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": "{{apiUrl}}/documents"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 or 503', () => pm.expect([401, 503]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Upload PDFs",
+          "request": {
+            "method": "POST",
+            "url": "{{apiUrl}}/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": "",
+                  "description": "Pick a PDF (≤ 25 MB)"
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": "",
+                  "description": "Optional second PDF (1–5 files)"
+                }
+              ]
+            },
+            "description": "202 `[{document_id, filename, status}]`. Processing runs in the background through the document pipeline; poll *Get one document*. The same file again returns the existing document."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 accepted', () => pm.response.to.have.status(202));",
+                  "const accepted = pm.response.json();",
+                  "if (accepted[0]) pm.collectionVariables.set('documentId', accepted[0].document_id);",
+                  "if (accepted[1]) pm.collectionVariables.set('documentId2', accepted[1].document_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List documents",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/documents"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const docs = pm.response.json();",
+                  "pm.test('a list', () => pm.expect(docs).to.be.an('array'));",
+                  "const ready = docs.filter((d) => d.status === 'ready');",
+                  "if (!pm.collectionVariables.get('documentId') && ready[0]) pm.collectionVariables.set('documentId', ready[0].document_id);",
+                  "if (!pm.collectionVariables.get('documentId2') && ready[1]) pm.collectionVariables.set('documentId2', ready[1].document_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List ready documents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{apiUrl}}/documents?status=ready",
+              "host": ["{{apiUrl}}"],
+              "path": ["documents"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ready",
+                  "description": "processing | ready | failed"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get one document (poll while processing)",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/documents/{{documentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const doc = pm.response.json();",
+                  "pm.test('detail fields', () => pm.expect(doc).to.include.keys('document_id', 'status', 'pages', 'chunks', 'sections', 'error'));",
+                  "console.log(`status: ${doc.status}`);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download the PDF",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/documents/{{documentId}}/file"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a PDF', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Fetch a paper by link (arXiv URL, DOI, Semantic Scholar)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{apiUrl}}/documents/fetch",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://arxiv.org/abs/2305.14314\"\n}"
+            },
+            "description": "Resolves the link to an open-access PDF, downloads it from an allowed host and processes it. 202 Document."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 or 400', () => pm.expect([202, 400]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry a failed document",
+          "request": {
+            "method": "POST",
+            "url": "{{apiUrl}}/documents/{{documentId}}/retry"
+          }
+        },
+        {
+          "name": "Delete a document",
+          "request": {
+            "method": "DELETE",
+            "url": "{{apiUrl}}/documents/{{documentId2}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 deleted', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('documentId2', '');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Analysis jobs",
+      "item": [
+        {
+          "name": "Ask a question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{apiUrl}}/query",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What are the main results?\",\n  \"document_ids\": [\"{{documentId}}\"]\n}"
+            },
+            "description": "202 `{job_id}`. Result: `{answer, claims[{claim, status, confidence, evidence[]}], highlights}`. `[n]` in the answer is the n-th paper of document_ids."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 job', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('jobId', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compare papers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{apiUrl}}/compare",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_ids\": [\"{{documentId}}\", \"{{documentId2}}\"],\n  \"attributes\": []\n}"
+            },
+            "description": "Needs 2–10 ready papers. Empty attributes = Method, Base model, Benchmark, Metric, Headline result, Code released."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 202) pm.collectionVariables.set('jobId', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Find contradictions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{apiUrl}}/contradiction",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_ids\": [\"{{documentId}}\", \"{{documentId2}}\"],\n  \"topic\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 202) pm.collectionVariables.set('jobId', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check a claim (searches Semantic Scholar, arXiv, Tavily)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{apiUrl}}/check",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"claim\": \"LoRA matches full fine-tuning on math and coding\",\n  \"max_papers\": 3,\n  \"sources\": [\"semantic_scholar\", \"arxiv\", \"tavily\"]\n}"
+            },
+            "description": "Searches, downloads open-access PDFs, indexes them and judges the claim. Can take a minute or two. Result: CheckResult."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 job', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('jobId', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job (poll until done)",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/jobs/{{jobId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const job = pm.response.json();",
+                  "pm.test('job fields', () => pm.expect(job).to.include.keys('job_id', 'kind', 'status'));",
+                  "console.log(`status: ${job.status}`);",
+                  "// Keep a chunk id for Documents › Get a chunk.",
+                  "const evidence = job.result?.claims?.[0]?.evidence?.[0] ?? job.result?.supports?.[0] ?? job.result?.partial?.[0];",
+                  "if (evidence) pm.collectionVariables.set('chunkId', evidence.chunk_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get a chunk (citation text)",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/chunks/{{chunkId}}",
+            "description": "Uses the chunk id saved by *Get job* from the first evidence of a finished job."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) pm.test('chunk fields', () => pm.expect(pm.response.json()).to.include.keys('chunk_id', 'document_id', 'page', 'section', 'text'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stream job steps (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": "{{apiUrl}}/jobs/{{jobId}}/stream",
+            "description": "Server-Sent Events: replays every `step`, then `done {result}` or `error {error}`. Browsers' EventSource cannot send a token, so for a signed-in user's job this returns 404 and clients poll *Get job* instead."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error examples",
+      "item": [
+        {
+          "name": "Validation error → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{apiUrl}}/query",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"\",\n  \"document_ids\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 INVALID_REQUEST', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('INVALID_REQUEST');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown document → 404",
+          "request": {
+            "method": "GET",
+            "url": "{{apiUrl}}/documents/DOC-does-not-exist"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Not a PDF → 415",
+          "request": {
+            "method": "POST",
+            "url": "{{apiUrl}}/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": "",
+                  "description": "Pick any non-PDF file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('415 UNSUPPORTED_TYPE or 400', () => pm.expect([400, 415]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

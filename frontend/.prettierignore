@@ -2,3 +2,5 @@ dist
 coverage
 package-lock.json
 public/mockServiceWorker.js
+# Leftover Next.js file; this Vite app does not use it.
+next-env.d.ts

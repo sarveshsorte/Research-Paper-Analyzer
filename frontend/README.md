@@ -12,11 +12,12 @@ Requires Node 20.19+ or 22.12+.
 ```bash
 cd frontend
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5174
 ```
 
-No `.env` is needed: unset variables fall back to the values in `.env.example`, which run the
-whole app against the mock API. Open the app, press **Try the live demo — no account**, then:
+No `.env` is needed: unset variables fall back to the values in `.env.example`, which use the
+FastAPI backend on port 8001. Set `VITE_USE_MOCKS=true` to run the whole app against the mock
+API instead. Open the app, press **Try the live demo — no account**, then:
 
 1. **Check** (`/`): the demo claim is pre-filled. Press **Check claim →** (or Ctrl/⌘+Enter) and
    watch the agent trace stream for about 6 seconds into the verdict, evidence and verified count.
@@ -45,10 +46,18 @@ whole app against the mock API. Open the app, press **Try the live demo — no a
 
 | Variable                    | Default                        | Purpose                                                                     |
 | --------------------------- | ------------------------------ | --------------------------------------------------------------------------- |
-| `VITE_API_BASE_URL`         | `http://localhost:8000/api/v1` | FastAPI base URL                                                            |
-| `VITE_USE_MOCKS`            | `true`                         | Answer every API call from the MSW mock server in the browser tab           |
+| `VITE_API_BASE_URL`         | `http://localhost:8001/api/v1` | FastAPI base URL                                                            |
+| `VITE_USE_MOCKS`            | `false` (`true` in tests)      | Answer every API call from the MSW mock server in the browser tab           |
 | `VITE_ENABLE_CLAIM_MODE`    | `true`                         | Show the Check screen; when `false`, `/` redirects to `/library`            |
 | `VITE_ENABLE_FETCH_BY_LINK` | `true`                         | Show "Fetch by link" in the Library (needs the proposed `/documents/fetch`) |
+| `VITE_FIREBASE_API_KEY`     | none                           | Firebase web app config. Without the first three, only the demo signs in    |
+| `VITE_FIREBASE_AUTH_DOMAIN` | none                           | e.g. `your-project.firebaseapp.com`                                         |
+| `VITE_FIREBASE_PROJECT_ID`  | none                           | Firebase project ID                                                         |
+| `VITE_FIREBASE_APP_ID`      | none                           | Firebase web app ID (optional for sign-in)                                  |
+
+Sign-in uses Firebase Authentication (email and password, Google, GitHub); the Firebase SDK is
+loaded only when someone signs in with an account. See the root README for the Firebase setup.
+In mock mode, `GET /auth/me` accepts any ID token as the sample account "Mock Reader".
 
 ## The mock API
 

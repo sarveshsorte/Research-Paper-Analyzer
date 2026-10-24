@@ -7,12 +7,18 @@ export interface EvidenceTarget {
   chunk?: string;
   /** Citation number shown in the header: "Evidence viewer · [2]". */
   n?: number;
+  /** The cited words to highlight. Without it the whole chunk is highlighted. */
+  quote?: string;
 }
 
 const KEYS = ['doc', 'page', 'chunk', 'cite'] as const;
 
 // The element that opened the viewer, so closing can return focus to it.
 let lastTrigger: HTMLElement | null = null;
+
+// Quotes of opened citations by chunk id. The URL keeps only ids, so after a reload the
+// viewer falls back to highlighting the chunk.
+const quotes = new Map<string, string>();
 
 /**
  * Evidence viewer state, kept in the URL (?doc=DOC002&page=8&chunk=DOC002_CH042&cite=2) so a
@@ -26,13 +32,15 @@ export function useEvidenceViewer() {
   const cite = Number(params.get('cite')) || undefined;
 
   const target = useMemo<EvidenceTarget | null>(
-    () => (doc ? { doc, page, chunk, n: cite } : null),
+    () =>
+      doc ? { doc, page, chunk, n: cite, quote: chunk ? quotes.get(chunk) : undefined } : null,
     [doc, page, chunk, cite],
   );
 
   const open = useCallback(
     (next: EvidenceTarget, trigger?: HTMLElement | null) => {
       lastTrigger = trigger ?? (document.activeElement as HTMLElement | null);
+      if (next.chunk && next.quote) quotes.set(next.chunk, next.quote);
       setParams((prev) => {
         const updated = new URLSearchParams(prev);
         updated.set('doc', next.doc);

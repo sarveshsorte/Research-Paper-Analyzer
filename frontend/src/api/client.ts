@@ -1,3 +1,4 @@
+import { endSession, readSession } from '@/features/auth/session';
 import { env } from '@/lib/env';
 
 export type ApiErrorCode =
@@ -9,7 +10,6 @@ export type ApiErrorCode =
   | 'RATE_LIMITED'
   | 'UPSTREAM_ERROR'
   | 'INTERNAL_ERROR'
-  /** Client-side: the request never reached the server. */
   | 'NETWORK_ERROR';
 
 const CODE_BY_STATUS: Record<number, ApiErrorCode> = {
@@ -25,7 +25,6 @@ const CODE_BY_STATUS: Record<number, ApiErrorCode> = {
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
-
   constructor(code: string, message: string, status: number) {
     super(message);
     this.name = 'ApiError';
@@ -36,7 +35,7 @@ export class ApiError extends Error {
 
 function isErrorBody(value: unknown): value is { error: { code: string; message: string } } {
   if (typeof value !== 'object' || value === null || !('error' in value)) return false;
-  const { error } = value;
+  const error = value.error;
   return (
     typeof error === 'object' &&
     error !== null &&
@@ -45,11 +44,19 @@ function isErrorBody(value: unknown): value is { error: { code: string; message:
   );
 }
 
-/** Turns a non-2xx response body into an ApiError, falling back to the HTTP status. */
+/** FastAPI's own errors are `{ detail: "message" }`. */
+function detailMessage(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || !('detail' in value)) return undefined;
+  return typeof value.detail === 'string' ? value.detail : undefined;
+}
+
 export function toApiError(status: number, body: unknown): ApiError {
   if (isErrorBody(body)) return new ApiError(body.error.code, body.error.message, status);
-  const code = CODE_BY_STATUS[status] ?? 'INTERNAL_ERROR';
-  return new ApiError(code, `Request failed (${status}).`, status);
+  return new ApiError(
+    CODE_BY_STATUS[status] ?? 'INTERNAL_ERROR',
+    detailMessage(body) ?? `Request failed (${status}).`,
+    status,
+  );
 }
 
 export function apiUrl(path: string): string {
@@ -66,23 +73,53 @@ async function readBody(response: Response): Promise<unknown> {
   }
 }
 
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE';
-  /** JSON-encoded unless it is FormData. */
-  body?: unknown;
-  signal?: AbortSignal;
+const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+/**
+ * A Firebase session sends its ID token; the demo sends none. When Firebase no longer has the
+ * user (signed out or disabled), the app session ends too.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  if (readSession()?.mode !== 'firebase') return {};
+  let token: string | null;
+  try {
+    const { currentIdToken } = await import('@/features/auth/firebase');
+    token = await currentIdToken();
+  } catch {
+    throw new ApiError(
+      'NETWORK_ERROR',
+      'Could not refresh your sign-in. Check your connection.',
+      0,
+    );
+  }
+  if (!token) {
+    endSession();
+    return {};
+  }
+  return bearer(token);
 }
 
-/** fetch wrapper: JSON in and out, typed ApiError for every failure. */
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'DELETE';
+  body?: unknown;
+  signal?: AbortSignal;
+  /** A Firebase ID token to send instead of the session's, e.g. while signing in. */
+  token?: string;
+}
+
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, signal } = options;
+  const { method = 'GET', body, signal, token } = options;
   const isForm = body instanceof FormData;
+  const auth = token ? bearer(token) : await authHeaders();
   let response: Response;
   try {
     response = await fetch(apiUrl(path), {
       method,
       signal,
-      headers: body === undefined || isForm ? undefined : { 'Content-Type': 'application/json' },
+      headers: {
+        ...auth,
+        ...(body === undefined || isForm ? {} : { 'Content-Type': 'application/json' }),
+      },
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   } catch (error) {
@@ -94,11 +131,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return data as T;
 }
 
-/** Downloads binary data (PDF bytes). */
 export async function apiFetchBytes(path: string, signal?: AbortSignal): Promise<Uint8Array> {
+  const headers = await authHeaders();
   let response: Response;
   try {
-    response = await fetch(apiUrl(path), { signal });
+    response = await fetch(apiUrl(path), { signal, headers });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError('NETWORK_ERROR', 'Could not reach the ClaimLens server.', 0);
@@ -107,18 +144,16 @@ export async function apiFetchBytes(path: string, signal?: AbortSignal): Promise
   return new Uint8Array(await response.arrayBuffer());
 }
 
-/**
- * Multipart upload over XHR, because fetch cannot report upload progress.
- * `onProgress` receives 0–100 for the whole request.
- */
-export function apiUpload<T>(
+export async function apiUpload<T>(
   path: string,
   form: FormData,
   onProgress?: (percent: number) => void,
 ): Promise<T> {
+  const headers = await authHeaders();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', apiUrl(path));
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
     };
@@ -132,9 +167,7 @@ export function apiUpload<T>(
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress?.(100);
         resolve(data as T);
-      } else {
-        reject(toApiError(xhr.status, data));
-      }
+      } else reject(toApiError(xhr.status, data));
     };
     xhr.onerror = () =>
       reject(new ApiError('NETWORK_ERROR', 'Could not reach the ClaimLens server.', 0));

@@ -108,7 +108,7 @@ export function CheckPage() {
   };
 
   const openEvidence = (e: Evidence, n: number) =>
-    viewer.open({ doc: e.document_id, page: e.page, chunk: e.chunk_id, n });
+    viewer.open({ doc: e.document_id, page: e.page, chunk: e.chunk_id, n, quote: e.quote });
 
   const papers = useMemo(
     () =>

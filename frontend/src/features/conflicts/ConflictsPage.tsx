@@ -65,7 +65,10 @@ export function ConflictsPage() {
   }
 
   const openSide = (side: ContradictionSide, trigger: HTMLElement) =>
-    viewer.open({ doc: side.document_id, page: side.page, chunk: side.chunk_id }, trigger);
+    viewer.open(
+      { doc: side.document_id, page: side.page, chunk: side.chunk_id, quote: side.text },
+      trigger,
+    );
 
   const applyTopic = (event: FormEvent) => {
     event.preventDefault();

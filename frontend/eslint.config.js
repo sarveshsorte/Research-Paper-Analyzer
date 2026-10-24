@@ -5,7 +5,8 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['dist', 'coverage', 'public/mockServiceWorker.js'] },
+  // next-env.d.ts is a leftover Next.js file; this Vite app does not use it.
+  { ignores: ['dist', 'coverage', 'public/mockServiceWorker.js', 'next-env.d.ts'] },
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

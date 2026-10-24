@@ -19,36 +19,44 @@ describe('app routes', () => {
     expect(document.title).toBe(`${nav} · ClaimLens`);
   });
 
-  it('sends visitors without a session to /login', async () => {
+  it('sends visitors without a session to the intro page first', async () => {
     const { router } = renderApp('/library', { signedIn: false });
 
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Every claim, traced to the page it came from.',
+      }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/welcome');
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+  });
+
+  it('goes intro → login → demo and returns to the page asked for, by keyboard', async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp('/library', { signedIn: false });
+
+    const [getStarted] = await screen.findAllByRole('link', { name: /Let’s get started/ });
+    getStarted?.focus();
+    await user.keyboard('{Enter}');
     expect(
       await screen.findByRole('heading', { level: 2, name: 'Open your evidence desk' }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/login');
-    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
-  });
 
-  it('starts the demo from the keyboard and returns to the page asked for', async () => {
-    const user = userEvent.setup();
-    const { router } = renderApp('/library', { signedIn: false });
-
-    const demo = await screen.findByRole('button', { name: /Try the live demo/ });
-    demo.focus();
+    screen.getByRole('button', { name: /Try the live demo/ }).focus();
     await user.keyboard('{Enter}');
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/library');
   });
 
-  it('answers the sign-in stub inline, not with an alert', async () => {
+  it('answers sign-in problems inline, not with an alert', async () => {
     const user = userEvent.setup();
     renderApp('/login', { signedIn: false });
 
     await user.click(await screen.findByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Accounts are coming soon — use the demo.',
-    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Enter your email and password.');
   });
 
   it('signs out from the account menu', async () => {
@@ -57,7 +65,7 @@ describe('app routes', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Account' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(router.state.location.pathname).toBe('/login');
+    expect(router.state.location.pathname).toBe('/welcome');
   });
 
   it('moves the active nav state when navigating', async () => {

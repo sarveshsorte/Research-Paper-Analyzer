@@ -55,6 +55,8 @@ temp/
 # Secrets
 *.pem
 *.key
+secrets/
+*firebase-adminsdk*.json
 
 # AI / ML generated files
 models/
