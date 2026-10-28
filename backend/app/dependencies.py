@@ -6,9 +6,10 @@ from query_pipeline.app.providers.fake_providers import FakeDenseRetriever, Fake
 from query_pipeline.app.providers.embedding_provider import OpenAICompatibleEmbeddingProvider
 from query_pipeline.app.providers.nemotron_provider import OpenAICompatibleGenerationProvider
 from query_pipeline.app.providers.qdrant_provider import QdrantDenseRetriever
-from database.repositories.chunk_repository import InMemoryChunkRepository
-from database.repositories.paper_repository import InMemoryPaperRepository
+from query_pipeline.app.providers.bm25_provider import SQLiteBM25Retriever
+from query_pipeline.app.providers.reranker_provider import NvidiaNemotronReranker, ScoreBasedReranker
 from database.repositories.workspace_repository import InMemoryWorkspaceRepository
+from backend.app.services.runtime import chunk_repository, paper_repository
 from query_pipeline.app.schemas.retrieval import RetrievalCandidate
 
 
@@ -21,12 +22,23 @@ def get_orchestrator() -> QueryOrchestrator:
 
         if not settings.embedding_api_key or not settings.embedding_base_url:
             raise RuntimeError("Real embedding provider is not configured")
-        if not settings.nebius_api_key or not settings.nebius_model:
+        if not settings.nvidia_api_key or not settings.nvidia_model:
             raise RuntimeError("Real generation provider is not configured")
-        qdrant = QdrantClient(
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key or None,
-        )
+        from backend.app.services.qdrant import get_shared_qdrant_client
+
+        qdrant = get_shared_qdrant_client(settings)
+
+        # ── Reranker: use Nemotron-3.5-Rerank if credentials are present,
+        #    fall back to the lightweight keyword scorer otherwise.
+        if settings.reranker_api_key and settings.reranker_base_url and settings.reranker_model:
+            reranker = NvidiaNemotronReranker(
+                base_url=settings.reranker_base_url,
+                api_key=settings.reranker_api_key,
+                model=settings.reranker_model,
+            )
+        else:
+            reranker = ScoreBasedReranker()
+
         return QueryOrchestrator(
             settings=settings,
             embedding_provider=OpenAICompatibleEmbeddingProvider(
@@ -37,13 +49,15 @@ def get_orchestrator() -> QueryOrchestrator:
             dense_retriever=QdrantDenseRetriever(
                 qdrant, settings.qdrant_collection
             ),
+            sparse_retriever=SQLiteBM25Retriever(settings.bm25_index_path),
+            reranker=reranker,
             generator=OpenAICompatibleGenerationProvider(
-                settings.nebius_base_url,
-                settings.nebius_api_key,
-                settings.nebius_model,
+                settings.nvidia_base_url,
+                settings.nvidia_api_key,
+                settings.nvidia_model,
             ),
-            paper_repository=InMemoryPaperRepository({}),
-            chunk_repository=InMemoryChunkRepository(set()),
+            paper_repository=paper_repository,
+            chunk_repository=chunk_repository,
             workspace_repository=InMemoryWorkspaceRepository(set()),
         )
     return QueryOrchestrator(
@@ -51,7 +65,7 @@ def get_orchestrator() -> QueryOrchestrator:
         embedding_provider=FakeEmbeddingProvider(),
         dense_retriever=FakeDenseRetriever(candidates),
         generator=FakeGenerator(),
-        paper_repository=InMemoryPaperRepository({}),
-        chunk_repository=InMemoryChunkRepository(set()),
+        paper_repository=paper_repository,
+        chunk_repository=chunk_repository,
         workspace_repository=InMemoryWorkspaceRepository(set()),
     )

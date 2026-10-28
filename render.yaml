@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: claimlens-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    disk:
+      name: claimlens-storage
+      mountPath: /app/storage
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: USE_FAKE_PROVIDERS
+        value: "false"
+      - key: NVIDIA_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b
+      - key: EMBEDDING_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: EMBEDDING_MODEL
+        value: nvidia/nemotron-3-embed-1b
+      - key: EMBEDDING_DIMENSION
+        value: "2048"
+      - key: RERANKER_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: RERANKER_API_KEY
+        sync: false
+      - key: RERANKER_MODEL
+        value: nvidia/nemotron-3.5-rerank-8b
+      - key: QDRANT_URL
+        value: http://localhost:6333
+      - key: QDRANT_COLLECTION
+        value: paper_chunks
+      - key: BM25_INDEX_PATH
+        value: storage/bm25/index.sqlite3
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,https://claimlens.vercel.app

@@ -157,7 +157,8 @@ class QueryOrchestrator:
                 uncertainties=["The generation provider returned an invalid response."],
             )
         claims = [map_claim(claim, evidence) for claim in generated.claims]
-        if any(claim.validation_status != "valid" for claim in claims):
+        valid_claims = [c for c in claims if c.validation_status == "valid"]
+        if not valid_claims and claims:
             return QueryResponse(
                 query_id=query_id,
                 answer="The generated answer could not be fully validated.",

@@ -1,53 +1,38 @@
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: claimlens-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./storage/qdrant_data:/qdrant/storage
+
   backend:
     build:
       context: .
-      dockerfile: docker/backend.Dockerfile
-    environment:
-      APP_ENV: development
-      # The database and the BM25 index live in the named volume.
-      STORAGE_PATH: /app/storage/researchlens.sqlite3
-      BM25_INDEX_PATH: /app/storage/bm25/index.sqlite3
-      # Model and search keys come from the root .env (git-ignored).
-      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-2048}
-      NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-https://api.tokenfactory.us-central1.nebius.com/v1/}
-      NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
-      NEBIUS_MODEL: ${NEBIUS_MODEL:-}
-      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-      # The Firebase service-account JSON goes in ./secrets (git-ignored).
-      FIREBASE_CREDENTIALS_PATH: /app/secrets/firebase-service-account.json
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
-    ports:
-      - "8001:8000"
-    volumes:
-      - researchlens-storage:/app/storage
-      - ./secrets:/app/secrets:ro
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  frontend:
-    build:
-      context: ./frontend
       dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: http://localhost:8001/api/v1
-        VITE_USE_MOCKS: "false"
-        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
-        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
-        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
-        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+    container_name: claimlens-backend
+    restart: unless-stopped
     ports:
-      - "5174:80"
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - USE_FAKE_PROVIDERS=false
+      - QDRANT_URL=http://qdrant:6333
+      - NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - NVIDIA_MODEL=${NVIDIA_MODEL:-nvidia/nemotron-3-ultra-550b-a55b}
+      - EMBEDDING_BASE_URL=https://integrate.api.nvidia.com/v1
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-${NVIDIA_API_KEY}}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nvidia/nemotron-3-embed-1b}
+      - EMBEDDING_DIMENSION=2048
+      - RERANKER_BASE_URL=https://integrate.api.nvidia.com/v1
+      - RERANKER_API_KEY=${RERANKER_API_KEY}
+      - RERANKER_MODEL=${RERANKER_MODEL:-nvidia/nemotron-3.5-rerank-8b}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./storage:/app/storage
     depends_on:
-      backend:
-        condition: service_healthy
-
-volumes:
-  researchlens-storage:
+      - qdrant

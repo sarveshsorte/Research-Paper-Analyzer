@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useChunk, useDocument, useDocumentFile } from '@/api/hooks';
 import { Button } from '@/components/Button';
 import { CloseIcon } from '@/components/icons';
@@ -52,10 +52,17 @@ export function EvidenceViewer({
   const [pdfFailed, setPdfFailed] = useState(false);
   const { ref, width } = useElementWidth<HTMLDivElement>();
 
+  useEffect(() => {
+    setPdfFailed(false);
+  }, [target.doc, target.page]);
+
   const pages = pageCount ?? detail.data?.pages;
   const citedPage = chunk.data?.page ?? target.page;
   const onCitedPage = target.page === citedPage;
-  const quote = onCitedPage ? (target.quote ?? chunk.data?.text) : undefined;
+  // Prefer the short snippet from the evidence result; fall back to full chunk text.
+  const quote = onCitedPage
+    ? (target.quote || (chunk.data?.text ? chunk.data.text.slice(0, 200) : undefined))
+    : undefined;
   const matchKey = `${target.doc}:${target.page}:${target.chunk ?? ''}`;
   const matchKind = match?.key === matchKey ? match.kind : undefined;
 

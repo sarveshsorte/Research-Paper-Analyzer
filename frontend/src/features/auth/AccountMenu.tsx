@@ -1,17 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
-import { endSession, useSession } from './session';
+import { replayEntryAnimation } from '@/components/EntryAnimation';
+import { endSession } from './session';
 
-/** The account menu shows the active demo session or Firebase account and signs out. */
+/** The "AC" square in the header: shows the demo session and signs out. */
 export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
-  const session = useSession();
-  const user = session?.mode === 'firebase' ? session.user : null;
 
   useEffect(() => {
     if (!open) return;
@@ -33,11 +32,6 @@ export function AccountMenu() {
   }, [open]);
 
   const signOut = () => {
-    if (user) {
-      void import('./firebase')
-        .then((firebase) => firebase.signOutOfFirebase())
-        .catch(() => undefined);
-    }
     endSession();
     navigate('/welcome', { replace: true });
   };
@@ -53,21 +47,27 @@ export function AccountMenu() {
         onClick={() => setOpen((value) => !value)}
         className="h-9 w-9 border-1.5 border-ink bg-sheet font-mono text-[12px] font-semibold text-ink"
       >
-        {user ? user.name.slice(0, 2).toUpperCase() : 'AC'}
+        AC
       </button>
       {open && (
         <div
           id={panelId}
           className="absolute right-0 top-full z-40 mt-2 flex w-64 flex-col gap-3 border-1.5 border-ink bg-sheet p-4"
         >
-          <p className="font-mono text-label uppercase text-muted">
-            {user ? user.name : 'Demo session'}
-          </p>
+          <p className="font-mono text-label uppercase text-muted">Demo session</p>
           <p className="text-[14px] leading-[1.5] text-ink-2">
-            {user
-              ? (user.email ?? 'Signed in')
-              : 'No account: your papers and checks stay in this browser tab.'}
+            No account: your papers and checks stay in this browser tab.
           </p>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => {
+              setOpen(false);
+              replayEntryAnimation();
+            }}
+          >
+            Replay intro
+          </Button>
           <Button variant="secondary" fullWidth onClick={signOut}>
             Sign out
           </Button>

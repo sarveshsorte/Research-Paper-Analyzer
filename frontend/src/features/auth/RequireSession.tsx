@@ -1,10 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from './session';
 
-/**
- * Route guard: without a session, start at the intro (/welcome), which leads to /login; the page
- * asked for rides along in router state so the demo returns there.
- */
+/** Route guard: without a session, start at /welcome, which leads to /login. */
 export function RequireSession() {
   const session = useSession();
   const location = useLocation();

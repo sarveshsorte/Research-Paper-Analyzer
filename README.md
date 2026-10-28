@@ -1,123 +1,164 @@
 # Research-Paper-Analyzer
 
-The repository now runs as a real frontend/backend application. The frontend
-uses the FastAPI API by default; MSW fixtures are enabled only when
-`VITE_USE_MOCKS=true` (and remain available to the test suite).
+Full-stack research-paper RAG application with a FastAPI backend, NVIDIA
+Nemotron generation, NVIDIA embeddings, Qdrant retrieval, BM25 indexing, and
+the ClaimLens React frontend.
 
-## Frontend (ClaimLens)
+## Requirements
 
-The web app lives in [`frontend/`](frontend/) and needs Node 20.19+ or 22.12+.
+- Python 3.12+
+- Node.js 20.19+ or 22.12+
+- Docker Desktop for local Qdrant
+- NVIDIA API credentials for live providers
+
+## Configure
+
+```bash
+cp .env.example .env
+```
+
+For live RAG, set these values in `.env`:
+
+```dotenv
+APP_ENV=development
+USE_FAKE_PROVIDERS=false
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_API_KEY=your_nvidia_api_key
+NVIDIA_MODEL=nvidia/nemotron-3-ultra-550b-a55b
+EMBEDDING_BASE_URL=https://integrate.api.nvidia.com/v1
+EMBEDDING_API_KEY=your_nvidia_api_key
+EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b
+EMBEDDING_DIMENSION=2048
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=paper_chunks
+BM25_INDEX_PATH=storage/bm25/index.sqlite3
+```
+
+Never commit `.env` or API keys. The example files contain placeholders only.
+
+## Install backend
+
+```bash
+uv venv .venv
+uv pip install --python .venv/bin/python \
+  -r backend/requirements.txt \
+  -r query_pipeline/requirements.txt \
+  -r document_pipeline/requirements.txt
+```
+
+## Start Qdrant
+
+Start Docker Desktop, then run:
+
+```bash
+docker run --rm --name research-paper-qdrant \
+  -p 6333:6333 \
+  -p 6334:6334 \
+  qdrant/qdrant:latest
+```
+
+## Start the backend
+
+In another terminal:
+
+```bash
+.venv/bin/uvicorn backend.app.main:app \
+  --reload --host 0.0.0.0 --port 8000
+```
+
+Backend URLs:
+
+- API: <http://localhost:8000>
+- Swagger: <http://localhost:8000/docs>
+- Health: <http://localhost:8000/health>
+
+## Start the frontend
+
+In a third terminal:
 
 ```bash
 cd frontend
-npm install
-npm run dev        # http://localhost:5174
+npm ci
 ```
 
-## Backend
-
-Create a Python environment, install the service dependencies, and start the
-API from the repository root:
+For mock mode, which does not need Qdrant or NVIDIA:
 
 ```bash
-uv venv
-uv pip install --python .venv/bin/python -r backend/requirements.txt -r document_pipeline/requirements.txt
-PYTHONPATH=. .venv/bin/uvicorn backend.app.main:app --reload --port 8001
+npm run dev -- --host 0.0.0.0
 ```
 
-Copy `.env.example` to `.env` and add the keys you have. The app works end to
-end without any: local embeddings stand in for NVIDIA's and answers quote the
-papers directly. With keys it uses:
+For the real backend, create `frontend/.env.local`:
 
-- **NVIDIA API Catalog embeddings** (`EMBEDDING_*`) for semantic retrieval;
-- **NVIDIA Nemotron on Nebius Token Factory** (`NEBIUS_API_KEY`, `NEBIUS_MODEL`)
-  for answers, comparisons, conflicts and claim judgements;
-- **Semantic Scholar, arXiv and Tavily** (`TAVILY_API_KEY`, optional
-  `SEMANTIC_SCHOLAR_API_KEY`) to find open-access papers for claim checks.
+```dotenv
+VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_USE_MOCKS=false
+VITE_ENABLE_CLAIM_MODE=true
+VITE_ENABLE_FETCH_BY_LINK=true
+```
 
-`GET /api/v1/health` shows which of these are active.
-
-How a paper flows: an upload (or a pasted arXiv/DOI/Semantic Scholar link, or a
-paper found by a claim check) runs through the teammates' `document_pipeline`
-(`ingest_pdf` → `embed_chunks` → `index_prepared_paper`). Chunks and their
-vectors are stored in SQLite (`STORAGE_PATH`) and the text in the pipeline's
-BM25 index (`BM25_INDEX_PATH`); no vector database server is needed. Questions
-run through the teammates' `QueryOrchestrator`; Compare, Conflicts and claim
-checks reuse the same retrieval. Every quote returned is re-checked against its
-chunk's stored text. The adapters live in `backend/app/adapters/`; the
-pipelines' own code is unchanged.
-
-The database holds users, documents, chunks, chunk vectors, jobs and job steps.
-It is created on first start and upgraded automatically when the schema changes
-(`backend/app/services/database.py`). Documents and jobs belong to the Firebase
-user who created them: a signed-in user only sees their own. Requests without a
-token are the live demo, which shares one pool of documents. Jobs survive a
-restart; uploads or jobs still running when the server stopped are marked
-failed. The API runs as a single process (SQLite).
-
-**API reference:** [`docs/api.md`](docs/api.md) lists every endpoint and every
-external API used. A Postman collection for testing them all is in
-[`docs/postman/ClaimLens.postman_collection.json`](docs/postman/ClaimLens.postman_collection.json).
-
-### Sign-in (Firebase Authentication)
-
-Accounts use Firebase Authentication: email and password, Google and GitHub.
-**Try the live demo** needs no account and works without any of this.
-
-1. In the [Firebase console](https://console.firebase.google.com/), create a
-   project and, under **Authentication > Sign-in method**, enable
-   Email/Password, Google and GitHub. GitHub needs an OAuth app whose callback
-   URL is the one Firebase shows on that screen.
-2. Under **Authentication > Settings > Authorized domains**, make sure
-   `localhost` (and any deployed domain) is listed.
-3. Frontend: register a web app under **Project settings > Your apps** and copy
-   its config into `frontend/.env`:
-
-   ```bash
-   VITE_FIREBASE_API_KEY=...
-   VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-   VITE_FIREBASE_PROJECT_ID=your-project
-   VITE_FIREBASE_APP_ID=...
-   ```
-
-   These values identify the project; they are not secrets.
-
-4. Backend: under **Project settings > Service accounts**, generate a private
-   key and save it as `secrets/firebase-service-account.json` (the `secrets/`
-   folder is git-ignored). Then set, in the root `.env`:
-
-   ```bash
-   FIREBASE_CREDENTIALS_PATH=secrets/firebase-service-account.json
-   FIREBASE_PROJECT_ID=your-project
-   ```
-
-   The service-account key is a secret: never commit it or put it in frontend
-   code. Without it, `GET /api/v1/auth/me` answers 503 and account sign-in
-   shows that Firebase is not configured.
-
-After Firebase signs a user in, the frontend calls `GET /api/v1/auth/me` with
-the Firebase ID token as `Authorization: Bearer <token>`; the backend verifies
-it with `firebase-admin`. Signed-in API calls send a fresh ID token the same way.
-
-### Backend tests
+Then start the frontend:
 
 ```bash
-uv pip install --python .venv/bin/python -r backend/requirements-dev.txt -r document_pipeline/requirements.txt
-.venv/bin/python -m pytest tests
+npm run dev -- --host 0.0.0.0
 ```
 
-## Docker
+Open <http://localhost:5173>.
+
+## End-to-end live flow
+
+1. Start Qdrant, the backend, and the frontend in separate terminals.
+2. Open the Library page and upload a PDF.
+3. The backend extracts text, chunks the paper, calls NVIDIA embeddings,
+   writes vectors to Qdrant and documents to BM25, then marks the paper ready.
+4. Select the ready paper and open Ask.
+5. The query is embedded, retrieved, filtered, and passed with evidence to
+   NVIDIA Nemotron.
+6. The validated answer, claims, uncertainties, and citations are returned
+   through the API/job or workspace SSE flow.
+
+Without indexed ready papers, the backend returns `no_ready_papers` safely.
+
+## Validation
+
+Backend:
 
 ```bash
-docker compose up --build
+.venv/bin/python -m compileall -q backend database query_pipeline document_pipeline
+.venv/bin/pytest query_pipeline/tests -q
 ```
 
-This starts the API on `http://localhost:8001` and the frontend on
-`http://localhost:5174`, with document state persisted in a named volume.
-For account sign-in, put the `VITE_FIREBASE_*` and `FIREBASE_PROJECT_ID`
-values in the root `.env` (Compose reads it) and the service-account key in
-`secrets/firebase-service-account.json`, which is mounted read-only.
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+## Useful endpoints
+
+```text
+GET  /health
+GET  /api/v1/documents
+POST /api/v1/upload
+POST /api/v1/workspaces/{workspace_id}/query
+POST /api/v1/workspaces/{workspace_id}/query/stream
+POST /api/v1/query
+GET  /api/v1/jobs/{job_id}
+GET  /api/v1/jobs/{job_id}/stream
+```
+
+## Project layout
+
+```text
+backend/            FastAPI application and API routes
+database/           Repository implementations
+document_pipeline/  PDF ingestion, chunking, embeddings, and indexing
+query_pipeline/     RAG orchestration, providers, schemas, and tests
+frontend/           ClaimLens Vite/React application
+```
 
 See [`frontend/README.md`](frontend/README.md) for frontend scripts and
-environment variables, and [`docs/FRONTEND_BUILD_PROMPT.md`](docs/FRONTEND_BUILD_PROMPT.md)
-for the original UI build plan.
+[`query_pipeline/README.md`](query_pipeline/README.md) for pipeline details.

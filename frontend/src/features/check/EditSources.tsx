@@ -9,14 +9,14 @@ export interface SourceSettings {
 }
 
 export const DEFAULT_SOURCE_SETTINGS: SourceSettings = {
-  sources: ['semantic_scholar', 'arxiv', 'tavily'],
+  sources: ['vector_dense', 'bm25_sparse', 'uploaded_docs'],
   maxPapers: 6,
 };
 
 const SOURCES: { value: SearchSource; label: string }[] = [
-  { value: 'semantic_scholar', label: 'Semantic Scholar' },
-  { value: 'arxiv', label: 'arXiv' },
-  { value: 'tavily', label: 'Tavily (web)' },
+  { value: 'vector_dense', label: 'Semantic Embeddings (dense)' },
+  { value: 'bm25_sparse', label: 'Keyword Match (BM25)' },
+  { value: 'uploaded_docs', label: 'Full Uploaded PDFs' },
 ];
 
 interface EditSourcesProps {
@@ -75,7 +75,7 @@ export function EditSources({ value, onChange }: EditSourcesProps) {
           className="absolute right-0 top-full z-30 mt-2 flex w-72 flex-col gap-4 border-1.5 border-ink bg-sheet p-4"
         >
           <fieldset className="flex flex-col gap-2.5">
-            <legend className="mb-2.5 font-mono text-label uppercase text-muted">Search</legend>
+            <legend className="mb-2.5 font-mono text-label uppercase text-muted">Library Search</legend>
             {SOURCES.map((source) => (
               <Checkbox
                 key={source.value}

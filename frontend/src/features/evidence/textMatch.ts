@@ -87,9 +87,11 @@ function approximate(items: string[], quote: string): QuoteMatch {
   const size = quoteWords.length;
   if (size === 0 || pageWords.length === 0) return NONE;
 
+  // Clamp window to available page words so we still search short pages.
+  const windowSize = Math.min(size, pageWords.length);
   let best = { score: 0, start: 0 };
-  for (let start = 0; start + Math.min(size, pageWords.length) <= pageWords.length; start += 1) {
-    const window = pageWords.slice(start, start + size).map((w) => w.text);
+  for (let start = 0; start + windowSize <= pageWords.length; start += 1) {
+    const window = pageWords.slice(start, start + windowSize).map((w) => w.text);
     const pool = [...window];
     let hits = 0;
     for (const word of quoteWords) {
@@ -103,7 +105,7 @@ function approximate(items: string[], quote: string): QuoteMatch {
     if (score > best.score) best = { score, start };
   }
   if (best.score < APPROXIMATE_THRESHOLD) return NONE;
-  const window = pageWords.slice(best.start, best.start + size);
+  const window = pageWords.slice(best.start, best.start + windowSize);
   return { kind: 'approximate', ranges: toRanges(window.flatMap((w) => w.positions)) };
 }
 

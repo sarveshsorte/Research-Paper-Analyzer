@@ -30,6 +30,7 @@ class RetrievalCandidate(BaseModel):
     page_end: int = Field(ge=1)
     section: str | None = None
     content_type: str = "text"
+    chunk_index: int | None = None
     content_hash: str | None = None
     dense_score: float | None = None
     sparse_score: float | None = None

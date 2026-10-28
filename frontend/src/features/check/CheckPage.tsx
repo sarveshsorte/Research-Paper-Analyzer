@@ -61,7 +61,7 @@ export function CheckPage() {
   const stream = useJobStream<CheckResult>(jobId);
   const start = useStartCheck();
   const viewer = useEvidenceViewer();
-  const [claim, setClaim] = useState(() => recent?.claim ?? DEMO_CLAIM);
+  const [claim, setClaim] = useState(() => recent?.claim ?? '');
   const [claimError, setClaimError] = useState<string>();
   const [settings, setSettings] = useState(DEFAULT_SOURCE_SETTINGS);
 
@@ -108,7 +108,7 @@ export function CheckPage() {
   };
 
   const openEvidence = (e: Evidence, n: number) =>
-    viewer.open({ doc: e.document_id, page: e.page, chunk: e.chunk_id, n, quote: e.quote });
+    viewer.open({ doc: e.document_id, page: e.page, chunk: e.chunk_id, quote: e.quote, n });
 
   const papers = useMemo(
     () =>
@@ -209,7 +209,7 @@ export function CheckPage() {
       {!jobId ? (
         <EmptyState
           title="Check a claim against the literature"
-          description="Paste a claim from a paper, a post or a talk. ClaimLens searches Semantic Scholar, arXiv and the web, reads the papers in full, and shows who agrees and who disagrees, with the page for every quote."
+          description="Paste a claim from a paper, a post or a talk. ClaimLens searches your indexed library of uploaded PDFs, reads the relevant passages in full, and shows which papers support, contest, or contradict the claim — with page references for every quote."
         />
       ) : (
         <>

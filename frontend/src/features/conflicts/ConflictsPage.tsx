@@ -66,7 +66,12 @@ export function ConflictsPage() {
 
   const openSide = (side: ContradictionSide, trigger: HTMLElement) =>
     viewer.open(
-      { doc: side.document_id, page: side.page, chunk: side.chunk_id, quote: side.text },
+      {
+        doc: side.document_id,
+        page: side.page,
+        chunk: side.chunk_id,
+        quote: side.quote || side.text,
+      },
       trigger,
     );
 
@@ -95,13 +100,22 @@ export function ConflictsPage() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-2">
-            <p className="font-mono text-label uppercase text-muted">
-              {ids.length} papers
-              {job.result
-                ? ` · ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'} found`
-                : ''}
-              {topic ? ` · topic: ${topic}` : ''}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="font-mono text-label uppercase text-muted">
+                {ids.length} papers
+                {job.result
+                  ? ` · ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'} found`
+                  : ''}
+                {topic ? ` · topic: ${topic}` : ''}
+              </p>
+              <ButtonLink
+                variant="secondary"
+                to={`/library?sel=${ids.join(',')}`}
+                className="text-[11px] font-mono py-0.5 px-2.5 h-auto min-h-0"
+              >
+                Change papers
+              </ButtonLink>
+            </div>
             <h1 className="font-display text-claim font-extrabold md:text-h1">
               Where the papers disagree
             </h1>

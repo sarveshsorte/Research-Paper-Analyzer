@@ -31,7 +31,12 @@ export function LibraryPage() {
   const canAct = selectedReady.length >= 2;
   const docsQuery = `docs=${selectedReady.join(',')}`;
 
-  const setSelection = (ids: string[]) =>
+  const setSelection = (ids: string[]) => {
+    try {
+      sessionStorage.setItem('claimlens_selected_docs', JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -40,6 +45,7 @@ export function LibraryPage() {
       },
       { replace: true },
     );
+  };
 
   const toggle = (id: string, checked: boolean) =>
     setSelection(checked ? [...selectedReady, id] : selectedReady.filter((x) => x !== id));

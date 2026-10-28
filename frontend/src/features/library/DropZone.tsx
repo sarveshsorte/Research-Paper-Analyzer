@@ -134,12 +134,20 @@ function FetchHalf() {
   const inputId = useId();
   const errorId = useId();
   const [url, setUrl] = useState('');
+  const [success, setSuccess] = useState(false);
   const fetchByLink = useFetchByLink();
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!url.trim()) return;
-    fetchByLink.mutate(url.trim(), { onSuccess: () => setUrl('') });
+    setSuccess(false);
+    fetchByLink.mutate(url.trim(), {
+      onSuccess: () => {
+        setUrl('');
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 4000);
+      },
+    });
   };
   const error = fetchByLink.error instanceof ApiError ? fetchByLink.error.message : undefined;
 
@@ -153,29 +161,40 @@ function FetchHalf() {
           id={inputId}
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          placeholder="arXiv URL, DOI or Semantic Scholar link"
+          placeholder="arXiv abs URL, DOI, Semantic Scholar or direct PDF link"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          className="box-content min-h-11 min-w-0 flex-1 border-1.5 border-ink bg-sheet px-3 font-mono text-[13px]"
+          disabled={fetchByLink.isPending}
+          className="box-content min-h-11 min-w-0 flex-1 border-1.5 border-ink bg-sheet px-3 font-mono text-[13px] disabled:opacity-50"
         />
         {/* The artboard leaves this button at the browser's 13.33px font size. */}
         <button
           type="submit"
           aria-busy={fetchByLink.isPending || undefined}
-          disabled={fetchByLink.isPending}
+          disabled={fetchByLink.isPending || !url.trim()}
           className="min-h-11 border-1.5 border-ink bg-ink px-4 text-[13.333px] font-semibold text-sheet disabled:opacity-40"
         >
-          Fetch
+          {fetchByLink.isPending ? 'Fetching…' : 'Fetch'}
         </button>
       </div>
+      <p className="font-mono text-[11px] text-muted">
+        Supports: arxiv.org/abs/…, arxiv.org/pdf/…, doi.org/…, semanticscholar.org/paper/…, or any
+        direct .pdf URL
+      </p>
       {error && (
         <p id={errorId} role="alert" className="font-mono text-[12px] text-contra">
           {error}
         </p>
       )}
+      {success && (
+        <p role="status" className="font-mono text-[12px] text-support">
+          ✓ Paper fetched — indexing in background. It will appear in your library shortly.
+        </p>
+      )}
     </form>
   );
 }
+
 
 /** Upload (drag-and-drop or browse) and, when enabled, fetch-by-link (artboard "02 · Library"). */
 export function DropZone() {

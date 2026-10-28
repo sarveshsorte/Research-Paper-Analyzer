@@ -6,8 +6,8 @@ import { RequireSession } from '@/features/auth/RequireSession';
 import { CheckPage } from '@/features/check/CheckPage';
 import { ComparePage } from '@/features/compare/ComparePage';
 import { ConflictsPage } from '@/features/conflicts/ConflictsPage';
-import { IntroPage } from '@/features/intro/IntroPage';
 import { LibraryPage } from '@/features/library/LibraryPage';
+import { WelcomePage } from '@/features/welcome/WelcomePage';
 import { env } from '@/lib/env';
 import { AppLayout } from './AppLayout';
 import { NotFoundPage } from './NotFoundPage';
@@ -32,8 +32,7 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
   : [];
 
 export const routes: RouteObject[] = [
-  // Public: the intro (first stop before signing in) and the sign-in page.
-  { path: '/welcome', element: <IntroPage /> },
+  { path: '/welcome', element: <WelcomePage /> },
   { path: '/login', element: <LoginPage /> },
   {
     element: <RequireSession />,

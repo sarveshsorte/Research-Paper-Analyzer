@@ -44,35 +44,50 @@ async def index_pdf(
             "Document indexing is not configured; set " + ", ".join(missing)
         )
 
-    from qdrant_client import QdrantClient
+    from backend.app.services.qdrant import get_shared_qdrant_client
 
-    client = QdrantClient(
-        url=settings.qdrant_url,
-        api_key=settings.qdrant_api_key or None,
+    client = get_shared_qdrant_client(settings)
+
+    prepared = await ingest_and_embed_pdf(
+        source,
+        workspace_id=workspace_id,
+        paper_id=paper_id,
+        paper_title=paper_title,
+        ocr_dpi=ocr_dpi,
+        ocr_language=ocr_language,
+        embedding_provider=OpenAICompatibleEmbeddingProvider(
+            settings.embedding_base_url or "",
+            settings.embedding_api_key or "",
+            settings.embedding_model or "",
+        ),
+        expected_dimension=settings.embedding_dimension,
     )
     try:
-        prepared = await ingest_and_embed_pdf(
-            source,
-            workspace_id=workspace_id,
-            paper_id=paper_id,
-            paper_title=paper_title,
-            ocr_dpi=ocr_dpi,
-            ocr_language=ocr_language,
-            embedding_provider=OpenAICompatibleEmbeddingProvider(
-                settings.embedding_base_url or "",
-                settings.embedding_api_key or "",
-                settings.embedding_model or "",
-            ),
-            expected_dimension=settings.embedding_dimension,
+        from backend.app.services.runtime import store_chunks
+
+        store_chunks(
+            [
+                {
+                    "chunk_id": c.chunk_id,
+                    "document_id": paper_id,
+                    "page": c.page_start,
+                    "section": c.section or "",
+                    "text": c.text,
+                }
+                for c in prepared.paper.chunks
+            ]
         )
-        return await index_prepared_paper(
-            prepared,
-            vector_indexer=QdrantVectorIndexer(
-                client,
-                collection_name=settings.qdrant_collection,
-                vector_dimension=settings.embedding_dimension,
-            ),
-            bm25_indexer=BM25Indexer(Path(settings.bm25_index_path)),
-        )
-    finally:
-        client.close()
+    except Exception:
+        pass
+
+    return await index_prepared_paper(
+        prepared,
+        vector_indexer=QdrantVectorIndexer(
+            client,
+            collection_name=settings.qdrant_collection,
+            vector_dimension=settings.embedding_dimension,
+        ),
+        bm25_indexer=BM25Indexer(Path(settings.bm25_index_path)),
+    )
+
+

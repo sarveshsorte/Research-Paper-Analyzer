@@ -42,13 +42,36 @@ class QdrantDenseRetriever:
             conditions.append(FieldCondition(
                 key="section", match=MatchAny(any=filters.sections)
             ))
-        points = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=embedding,
-            query_filter=Filter(must=conditions),
-            limit=limit,
-            with_payload=True,
-        )
+        try:
+            if hasattr(self.client, "collection_exists") and not self.client.collection_exists(self.collection_name):
+                return []
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self.client, "query_points"):
+                response = self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=embedding,
+                    query_filter=Filter(must=conditions),
+                    limit=limit,
+                    with_payload=True,
+                )
+                points = response.points
+            elif hasattr(self.client, "search"):
+                points = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=embedding,
+                    query_filter=Filter(must=conditions),
+                    limit=limit,
+                    with_payload=True,
+                )
+            else:
+                points = []
+        except Exception as exc:
+            if "not found" in str(exc).lower():
+                return []
+            raise
         result = []
         for point in points:
             payload = point.payload or {}

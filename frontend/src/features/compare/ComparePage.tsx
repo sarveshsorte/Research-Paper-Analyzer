@@ -74,9 +74,18 @@ export function ComparePage() {
     <PageContainer>
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-2">
-          <p className="font-mono text-label uppercase text-muted">
-            {ids.length} papers{job.result ? ` · ${rows.length} attributes` : ''}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="font-mono text-label uppercase text-muted">
+              {ids.length} papers{job.result ? ` · ${rows.length} attributes` : ''}
+            </p>
+            <ButtonLink
+              variant="secondary"
+              to={`/library?sel=${ids.join(',')}`}
+              className="text-[11px] font-mono py-0.5 px-2.5 h-auto min-h-0"
+            >
+              Change papers
+            </ButtonLink>
+          </div>
           <h1 className="font-display text-claim font-extrabold md:text-h1">Compare</h1>
           <p className="text-[16px] text-ink-2">
             {job.result ? <Summary differing={differing} /> : 'Reading the papers side by side. '}
@@ -173,6 +182,7 @@ export function ComparePage() {
                                       doc: doc.document_id,
                                       page: cell.page ?? 1,
                                       chunk: cell.chunk_id,
+                                      quote: cell.quote,
                                     },
                                     event.currentTarget,
                                   )
