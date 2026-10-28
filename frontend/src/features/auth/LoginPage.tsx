@@ -1,29 +1,126 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, type Location } from 'react-router-dom';
+import type { User } from 'firebase/auth';
+import { apiFetch, ApiError } from '@/api/client';
 import { Button } from '@/components/Button';
 import { Logo } from '@/components/Logo';
 import { TextInput } from '@/components/TextInput';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import { signIn, startDemoSession } from './session';
-
 import { ExampleCheck } from './ExampleCheck';
+import type * as FirebaseAuth from './firebase';
+import { startDemoSession, startFirebaseSession, type SessionUser } from './session';
 
-/** /login (artboard "00 · Sign in"). Accounts are stubbed; the demo starts a session. */
+const WRONG_PASSWORD = 'That email and password don’t match an account.';
+const CANCELLED = 'Sign-in was cancelled.';
+
+const SIGN_IN_ERRORS: Record<string, string> = {
+  'claimlens/firebase-not-configured': 'Accounts aren’t set up here yet — use the live demo.',
+  'auth/invalid-credential': WRONG_PASSWORD,
+  'auth/invalid-login-credentials': WRONG_PASSWORD,
+  'auth/wrong-password': WRONG_PASSWORD,
+  'auth/user-not-found': WRONG_PASSWORD,
+  'auth/invalid-email': 'Enter a valid email address.',
+  'auth/email-already-in-use': 'An account with that email already exists. Sign in instead.',
+  'auth/weak-password': 'Choose a password of at least 6 characters.',
+  'auth/popup-closed-by-user': CANCELLED,
+  'auth/cancelled-popup-request': CANCELLED,
+  'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups and try again.',
+  'auth/account-exists-with-different-credential':
+    'That email already signs in another way. Use the method you used before.',
+  'auth/operation-not-allowed': 'That sign-in method isn’t turned on for ClaimLens.',
+  'auth/unauthorized-domain': 'This site isn’t allowed to sign in with Firebase yet.',
+  'auth/user-disabled': 'This account has been disabled.',
+  'auth/too-many-requests': 'Too many attempts. Wait a moment and try again.',
+  'auth/network-request-failed': 'Could not reach Firebase. Check your connection.',
+};
+
+function signInErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code: unknown }).code : null;
+  return (
+    (typeof code === 'string' ? SIGN_IN_ERRORS[code] : undefined) ??
+    'Sign-in failed. Try again, or use the live demo.'
+  );
+}
+
+function field(form: HTMLFormElement | null, name: string): string {
+  const value = form ? new FormData(form).get(name) : null;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** /login: Accounts use Firebase Authentication; the demo needs no account. */
 export function LoginPage() {
   useDocumentTitle('Sign in');
   const navigate = useNavigate();
   const location = useLocation();
+  const formRef = useRef<HTMLFormElement>(null);
   const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const from = (location.state as { from?: Location } | null)?.from;
+  const goOn = () => navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
+
   const startDemo = () => {
     startDemoSession();
-    navigate(from ? `${from.pathname}${from.search}` : '/', { replace: true });
+    goOn();
   };
-  const comingSoon = async () => setNotice((await signIn()).message);
-  const onSubmit = (event: FormEvent) => {
+
+  /** Signs in with Firebase, then has the API confirm the ID token before the session starts. */
+  const signInWithFb = async (attempt: (firebase: typeof FirebaseAuth) => Promise<User>) => {
+    setBusy(true);
+    setNotice('');
+    let firebase: typeof FirebaseAuth | undefined;
+    try {
+      firebase = await import('./firebase');
+      const account = await attempt(firebase);
+      const token = await account.getIdToken();
+      const { user } = await apiFetch<{ user: SessionUser }>('/auth/me', { token });
+      startFirebaseSession(user);
+      goOn();
+    } catch (error) {
+      // No app session, so no Firebase sign-in either.
+      void firebase?.signOutOfFirebase().catch(() => undefined);
+      const msg = signInErrorMessage(error);
+      if (msg) setNotice(msg);
+      setBusy(false);
+    }
+  };
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void comingSoon();
+    const email = field(event.currentTarget, 'email');
+    const password = field(event.currentTarget, 'password');
+    if (!email || !password) {
+      setNotice('Enter your email and password.');
+      return;
+    }
+    void signInWithFb((firebase) =>
+      creating
+        ? firebase.createAccount(email, password)
+        : firebase.signInWithEmail(email, password),
+    );
+  };
+
+  const resetPassword = async () => {
+    const email = field(formRef.current, 'email');
+    if (!email) {
+      setNotice('Enter your email above, then choose “Forgot?” again.');
+      return;
+    }
+    try {
+      const firebase = await import('./firebase');
+      await firebase.sendPasswordReset(email);
+      setNotice(`If ${email} has an account, a reset link is on its way.`);
+    } catch (error) {
+      const msg = signInErrorMessage(error);
+      if (msg) setNotice(msg);
+    }
+  };
+
+  const toggleCreating = () => {
+    setCreating((value) => !value);
+    setNotice('');
   };
 
   return (
@@ -49,8 +146,8 @@ export function LoginPage() {
         </div>
         <p className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[12px] text-muted-on-ink">
           <span>NVIDIA Nemotron 3</span>
-          <span>Nebius Token Factory</span>
-          <span>Semantic Scholar · arXiv · Tavily</span>
+          <span>Qdrant Vector Engine</span>
+          <span>Semantic Scholar · arXiv · PyMuPDF</span>
         </p>
       </section>
 
@@ -70,7 +167,9 @@ export function LoginPage() {
             >
               ← Back to Welcome
             </Link>
-            <p className="font-mono text-label uppercase text-muted">Sign in</p>
+            <p className="font-mono text-label uppercase text-muted">
+              {creating ? 'Create account' : 'Sign in'}
+            </p>
             <h2 id="signin-h" className="font-display text-[34px] font-bold tracking-[-0.8px]">
               Open your evidence desk
             </h2>
@@ -83,11 +182,11 @@ export function LoginPage() {
 
           <div className="flex items-center gap-3 font-mono text-[12px] text-muted">
             <span aria-hidden="true" className="h-px flex-1 bg-rule-dashed" />
-            or sign in
+            or {creating ? 'create an account' : 'sign in'}
             <span aria-hidden="true" className="h-px flex-1 bg-rule-dashed" />
           </div>
 
-          <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+          <form ref={formRef} className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
             <TextInput
               label="Email"
               type="email"
@@ -99,23 +198,35 @@ export function LoginPage() {
               label="Password"
               type="password"
               name="password"
-              autoComplete="current-password"
+              autoComplete={creating ? 'new-password' : 'current-password'}
               labelAction={
-                <button type="button" className="underline" onClick={() => void comingSoon()}>
-                  Forgot?
-                </button>
+                creating ? undefined : (
+                  <button type="button" className="underline" onClick={() => void resetPassword()}>
+                    Forgot?
+                  </button>
+                )
               }
             />
-            <Button type="submit" variant="primary-sheet" size="lg" fullWidth>
-              Sign in
+            <Button type="submit" variant="primary-sheet" size="lg" fullWidth disabled={busy}>
+              {creating ? 'Create account' : 'Sign in'}
             </Button>
           </form>
 
           <div className="grid grid-cols-2 gap-2.5">
-            <Button variant="secondary" size="field" onClick={() => void comingSoon()}>
+            <Button
+              variant="secondary"
+              size="field"
+              disabled={busy}
+              onClick={() => void signInWithFb((fb) => fb.signInWithProvider('github'))}
+            >
               Continue with GitHub
             </Button>
-            <Button variant="secondary" size="field" onClick={() => void comingSoon()}>
+            <Button
+              variant="secondary"
+              size="field"
+              disabled={busy}
+              onClick={() => void signInWithFb((fb) => fb.signInWithProvider('google'))}
+            >
               Continue with Google
             </Button>
           </div>
@@ -128,13 +239,13 @@ export function LoginPage() {
           </p>
 
           <p className="text-[14px] text-muted">
-            New here?{' '}
+            {creating ? 'Have an account?' : 'New here?'}{' '}
             <button
               type="button"
               className="font-semibold text-ink underline"
-              onClick={() => void comingSoon()}
+              onClick={toggleCreating}
             >
-              Create an account
+              {creating ? 'Sign in' : 'Create an account'}
             </button>{' '}
             · Your uploads stay private to you.
           </p>

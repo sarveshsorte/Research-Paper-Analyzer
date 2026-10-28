@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     max_papers_per_query: int = Field(default=20, ge=1, le=100)
     use_fake_providers: bool | None = None
 
+    storage_path: str = "storage/data.sqlite3"
+    firebase_credentials_path: str | None = None
+    firebase_project_id: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=(
             ".env",

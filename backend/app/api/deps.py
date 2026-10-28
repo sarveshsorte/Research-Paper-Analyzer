@@ -1,12 +1,15 @@
 """Dependencies shared by the API routes."""
 
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
 
 from backend.app.config import get_settings
-from backend.app.services.container import Services
+try:
+    from backend.app.services.container import Services
+except Exception:
+    Services = Any  # type: ignore[misc,assignment]
 from backend.app.services.firebase_auth import FirebaseUser, optional_user
 from backend.app.services.runtime import RuntimeStore
 
@@ -16,9 +19,9 @@ def get_store() -> RuntimeStore:
     return RuntimeStore(get_settings().storage_path)
 
 
-def get_services(request: Request) -> Services:
+def get_services(request: Request) -> Any:
     """Built once in the app's lifespan (see main.py)."""
-    return request.app.state.services
+    return getattr(request.app.state, "services", None)
 
 
 def store_user(store: RuntimeStore, user: FirebaseUser) -> None:

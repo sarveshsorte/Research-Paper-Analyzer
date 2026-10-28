@@ -1,6 +1,7 @@
 import { HttpResponse, bypass, http, sse } from 'msw';
 import { apiUrl } from '@/api/client';
 import type { Document, DocumentDetail, Job, SearchSource, UploadAccepted } from '@/api/types';
+import type { SessionUser } from '@/features/auth/session';
 import {
   JOB_ERROR,
   addDocument,
@@ -100,9 +101,24 @@ function streamHandler() {
   );
 }
 
+// The mocks cannot check a Firebase ID token, so any bearer token is this account.
+export const MOCK_USER: SessionUser = {
+  id: 'mock-user',
+  name: 'Mock Reader',
+  email: 'reader@claimlens.test',
+  picture: null,
+  provider: 'password',
+};
+
 export const handlers = [
   http.get(apiUrl('/health'), () =>
     HttpResponse.json({ status: 'ok', version: '0.1.0-mock', mock_ai: true }),
+  ),
+
+  http.get(apiUrl('/auth/me'), ({ request }) =>
+    request.headers.get('Authorization')?.startsWith('Bearer ')
+      ? HttpResponse.json({ user: MOCK_USER })
+      : HttpResponse.json({ detail: 'Sign in to continue.' }, { status: 401 }),
   ),
 
   // ---- Documents ------------------------------------------------------------------------------
