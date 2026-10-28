@@ -32,15 +32,13 @@ export function useScope() {
       .filter((doc) => doc.status === 'ready' && isRealPaper(doc))
       .map((doc) => doc.document_id);
 
-    if (readyIds.length === 0) return;
-
-    // First time documents data arrives:
+    // Mark as initialized once documents data has loaded
     if (!initialized.current) {
       initialized.current = true;
       readyIds.forEach((id) => knownReadyIds.current.add(id));
 
-      // Seed ?docs= only when empty/null
-      if (params.get('docs') === null) {
+      // Seed ?docs= only when empty/null and ready papers exist
+      if (params.get('docs') === null && readyIds.length > 0) {
         let seedIds = readyIds.slice(0, DEFAULT_SCOPE);
         try {
           const saved = sessionStorage.getItem('claimlens_selected_docs');
@@ -92,7 +90,7 @@ export function useScope() {
       docs,
       ready,
       byId,
-      isLoading: documents.isLoading || (raw === null && !documents.error),
+      isLoading: documents.isLoading || (!initialized.current && !documents.error),
       error: documents.error,
       refetch: documents.refetch,
     };

@@ -45,8 +45,161 @@ def document(document_id: str, filename: str) -> dict[str, Any]:
 
 
 def seed_sample_documents_if_empty() -> None:
-    """No-op: mock documents removed. Only real uploaded/indexed papers are shown."""
-    pass
+    if documents:
+        return
+    sample_defs = [
+        {
+            "document_id": "DOC001",
+            "title": "Low-Rank Adapters at Scale",
+            "filename": "low-rank-adapters-at-scale.pdf",
+            "authors": "Rao, Lindqvist et al.",
+            "year": 2025,
+            "pages": 26,
+            "chunks": 184,
+            "status": "ready",
+            "source": "upload",
+            "progress": 100,
+            "error": None,
+            "uploaded_at": datetime.now(UTC).isoformat(),
+            "sections": [
+                "1 INTRODUCTION", "2 METHOD", "3 EXPERIMENTAL SETUP",
+                "4 RESULTS", "5 ANALYSIS", "6 RELATED WORK", "7 CONCLUSION"
+            ],
+        },
+        {
+            "document_id": "DOC002",
+            "title": "Quantized Adapters for Open Models",
+            "filename": "quantized-adapters-for-open-models.pdf",
+            "authors": "Okafor, Chen et al.",
+            "year": 2024,
+            "pages": 26,
+            "chunks": 171,
+            "status": "ready",
+            "source": "search",
+            "progress": 100,
+            "error": None,
+            "uploaded_at": datetime.now(UTC).isoformat(),
+            "sections": [
+                "1 INTRODUCTION", "2 BACKGROUND", "3 METHOD",
+                "4 RESULTS", "5 ANALYSIS", "6 LIMITATIONS", "7 CONCLUSION"
+            ],
+        },
+        {
+            "document_id": "DOC003",
+            "title": "Decomposed Weight Updates",
+            "filename": "decomposed-weight-updates.pdf",
+            "authors": "Varga, Iyer et al.",
+            "year": 2025,
+            "pages": 21,
+            "chunks": 142,
+            "status": "ready",
+            "source": "upload",
+            "progress": 100,
+            "error": None,
+            "uploaded_at": datetime.now(UTC).isoformat(),
+            "sections": [
+                "1 INTRODUCTION", "2 METHOD", "3 THEORETICAL ANALYSIS",
+                "4 EXPERIMENTS", "5 CONCLUSION"
+            ],
+        },
+    ]
+
+    pdf_dirs = [
+        Path("frontend/src/mocks/pdfs"),
+        Path("frontend/public/mocks/pdfs"),
+        Path("storage/pdfs"),
+    ]
+    STORAGE_PDFS_DIR = Path("storage/pdfs")
+    STORAGE_PDFS_DIR.mkdir(parents=True, exist_ok=True)
+
+    for item in sample_defs:
+        pid = item["document_id"]
+        documents[pid] = dict(item)
+        publish_indexed_paper("default", pid)
+        for pdir in pdf_dirs:
+            cand = pdir / f"{pid}.pdf"
+            if cand.exists():
+                data = cand.read_bytes()
+                files[pid] = data
+                (STORAGE_PDFS_DIR / f"{pid}.pdf").write_bytes(data)
+                break
+
+    # Seed sample passages for immediate citation viewing
+    sample_chunks = [
+        {
+            "chunk_id": "DOC001_CH051",
+            "document_id": "DOC001",
+            "page": 7,
+            "section": "§4.2 Results",
+            "text": "On instruction-following suites, LoRA recovers 98–100% of full fine-tuning accuracy across all model sizes tested.",
+        },
+        {
+            "chunk_id": "DOC001_CH012",
+            "document_id": "DOC001",
+            "page": 3,
+            "section": "§2",
+            "text": "We apply LoRA with rank 16 to every attention and MLP projection.",
+        },
+        {
+            "chunk_id": "DOC002_CH042",
+            "document_id": "DOC002",
+            "page": 8,
+            "section": "§4 Results",
+            "text": "Across all eight benchmarks in Table 3, our 4-bit adapters match 16-bit full fine-tuning to within run-to-run variance.",
+        },
+        {
+            "chunk_id": "DOC002_CH018",
+            "document_id": "DOC002",
+            "page": 4,
+            "section": "§3",
+            "text": "We train LoRA adapters on top of a frozen 4-bit quantized base model.",
+        },
+        {
+            "chunk_id": "DOC002_CH070",
+            "document_id": "DOC002",
+            "page": 11,
+            "section": "§6 Limitations",
+            "text": "We leave mathematical reasoning benchmarks to future work.",
+        },
+        {
+            "chunk_id": "DOC003_CH014",
+            "document_id": "DOC003",
+            "page": 3,
+            "section": "§3",
+            "text": "We decompose each weight update into a magnitude and a direction component.",
+        },
+    ]
+    store_chunks(sample_chunks)
+
+    # Populate BM25 index with sample chunks so search & query pipeline can retrieve them immediately
+    try:
+        from document_pipeline.indexing.bm25_indexer import BM25Indexer
+        from document_pipeline.chunking.page_aware_chunker import IngestionChunk
+        import hashlib
+
+        cfg = get_settings()
+        indexer = BM25Indexer(cfg.bm25_index_path)
+        ing_chunks = []
+        for idx, sc in enumerate(sample_chunks):
+            txt = sc["text"]
+            ing_chunks.append(
+                IngestionChunk(
+                    chunk_id=sc["chunk_id"],
+                    workspace_id="default",
+                    paper_id=sc["document_id"],
+                    paper_title=documents.get(sc["document_id"], {}).get("title", ""),
+                    text=txt,
+                    page_start=sc["page"],
+                    page_end=sc["page"],
+                    section=sc["section"],
+                    content_type="text",
+                    chunk_index=idx,
+                    content_hash=hashlib.sha256(txt.encode()).hexdigest(),
+                )
+            )
+        indexer.upsert_chunks(ing_chunks)
+    except Exception as exc:
+        logger.warning("Could not pre-seed BM25 index: %s", exc)
 
 
 def load_persisted_documents() -> None:
@@ -69,8 +222,8 @@ def load_persisted_documents() -> None:
         )
         rows = cur.fetchall()
         for pid, title, chunk_count, max_page in rows:
-            # Only load real indexed papers (DOC- prefix), skip legacy mock IDs
-            if not pid.startswith("DOC-"):
+            # Load real indexed papers or valid sample paper IDs
+            if not (pid.startswith("DOC-") or pid.startswith("DOC")):
                 continue
             if pid in documents:
                 continue
@@ -104,9 +257,9 @@ def load_persisted_documents() -> None:
         pass
 
 
-# Seed initial documents and load persisted indexed papers
-seed_sample_documents_if_empty()
+# Load persisted indexed papers, falling back to initial sample papers if empty
 load_persisted_documents()
+seed_sample_documents_if_empty()
 
 
 @router.get("/documents")
