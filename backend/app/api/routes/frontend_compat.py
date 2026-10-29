@@ -105,6 +105,7 @@ def seed_sample_documents_if_empty() -> None:
     ]
 
     pdf_dirs = [
+        Path("backend/app/sample_pdfs"),
         Path("frontend/src/mocks/pdfs"),
         Path("frontend/public/mocks/pdfs"),
         Path("storage/pdfs"),
