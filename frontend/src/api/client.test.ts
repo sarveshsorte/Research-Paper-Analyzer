@@ -1,12 +1,7 @@
 import { HttpResponse, http } from 'msw';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentIdToken } from '@/features/auth/firebase';
-import { readSession, startDemoSession, startFirebaseSession } from '@/features/auth/session';
-import { MOCK_USER } from '@/mocks/handlers';
+import { describe, expect, it } from 'vitest';
 import { server } from '@/mocks/node';
 import { ApiError, apiFetch, apiUrl, toApiError } from './client';
-
-vi.mock('@/features/auth/firebase', () => ({ currentIdToken: vi.fn() }));
 
 describe('toApiError', () => {
   it('reads the { error: { code, message } } shape', () => {
@@ -27,65 +22,6 @@ describe('toApiError', () => {
       status: 413,
     });
     expect(toApiError(503, undefined)).toMatchObject({ code: 'INTERNAL_ERROR', status: 503 });
-  });
-
-  it('keeps the message from a FastAPI { detail } body', () => {
-    expect(toApiError(503, { detail: 'Firebase sign-in is not configured.' })).toMatchObject({
-      code: 'INTERNAL_ERROR',
-      message: 'Firebase sign-in is not configured.',
-      status: 503,
-    });
-  });
-});
-
-describe('auth headers', () => {
-  let authorization: string | null;
-
-  beforeEach(() => {
-    vi.mocked(currentIdToken).mockReset();
-    authorization = null;
-    server.use(
-      http.get(apiUrl('/health'), ({ request }) => {
-        authorization = request.headers.get('Authorization');
-        return HttpResponse.json({ status: 'ok' });
-      }),
-    );
-  });
-
-  it('sends the ID token of a Firebase session', async () => {
-    vi.mocked(currentIdToken).mockResolvedValue('id-token');
-    startFirebaseSession(MOCK_USER);
-
-    await apiFetch('/health');
-
-    expect(authorization).toBe('Bearer id-token');
-  });
-
-  it('sends none for the demo', async () => {
-    startDemoSession();
-
-    await apiFetch('/health');
-
-    expect(authorization).toBeNull();
-    expect(currentIdToken).not.toHaveBeenCalled();
-  });
-
-  it('ends the app session once Firebase has signed out', async () => {
-    vi.mocked(currentIdToken).mockResolvedValue(null);
-    startFirebaseSession(MOCK_USER);
-
-    await apiFetch('/health');
-
-    expect(authorization).toBeNull();
-    expect(readSession()).toBeNull();
-  });
-
-  it('reports a failed token refresh as NETWORK_ERROR', async () => {
-    vi.mocked(currentIdToken).mockRejectedValue(new Error('auth/network-request-failed'));
-    startFirebaseSession(MOCK_USER);
-
-    await expect(apiFetch('/health')).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
-    expect(readSession()).toEqual({ mode: 'firebase', user: MOCK_USER });
   });
 });
 

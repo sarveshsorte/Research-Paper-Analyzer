@@ -102,6 +102,8 @@ export function useUpload() {
         }),
       );
       await queryClient.invalidateQueries({ queryKey: queryKeys.documents });
+      // Invalidate any cached compare/contradiction jobs so they re-run with the new paper
+      await queryClient.invalidateQueries({ queryKey: ['job-start'] });
     },
     [queryClient],
   );
@@ -169,6 +171,9 @@ export function useStartContradiction() {
  * Starts a job once per `key` (e.g. a document set) and follows it. The job id is cached, and
  * so is the finished result (see useJobStream), so switching tabs never re-runs the job.
  * `restart()` starts a fresh job for the same key.
+ *
+ * The job result is kept for 5 minutes. Since the key always includes the document IDs,
+ * uploading a new paper changes the key and automatically triggers a fresh job.
  */
 export function useCachedJob<T>(
   key: readonly unknown[],
@@ -179,8 +184,8 @@ export function useCachedJob<T>(
     queryKey: ['job-start', ...key],
     queryFn: start,
     enabled,
-    staleTime: Infinity,
-    gcTime: 30 * 60 * 1000,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
     retry: false,
   });
   const jobId = job.isFetching ? undefined : job.data?.job_id;

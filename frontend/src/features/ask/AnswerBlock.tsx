@@ -103,7 +103,7 @@ export function AnswerBlock({ entry, scope, first, onOpen, onSettled, onRetry }:
               <SectionLabel>
                 Answer · grounded in {grounded} paper{grounded === 1 ? '' : 's'}
               </SectionLabel>
-              <p className="text-[17px] leading-[1.65]">
+              <div className="text-[17px] leading-[1.65] whitespace-pre-line">
                 {parts.map((part, index) => {
                   if (part.kind === 'text') return part.text;
                   if (part.kind === 'mark') return <Mark key={index}>{part.text}</Mark>;
@@ -118,20 +118,14 @@ export function AnswerBlock({ entry, scope, first, onOpen, onSettled, onRetry }:
                       onClick={(event: MouseEvent<HTMLButtonElement>) => {
                         if (!doc) return;
                         onOpen(
-                          {
-                            doc,
-                            page: evidence?.page ?? 1,
-                            chunk: evidence?.chunk_id,
-                            n: part.n,
-                            quote: evidence?.quote,
-                          },
+                          { doc, page: evidence?.page ?? 1, chunk: evidence?.chunk_id, quote: evidence?.quote, n: part.n },
                           event.currentTarget,
                         );
                       }}
                     />
                   );
                 })}
-              </p>
+              </div>
               {result.claims.length > 0 && (
                 <div className="flex flex-col gap-2.5 border-t border-dashed border-rule-dashed pt-3.5">
                   <SectionLabel>Claims in this answer</SectionLabel>

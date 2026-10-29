@@ -1,6 +1,5 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,58 +8,39 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
     qdrant_collection: str = "paper_chunks"
 
     bm25_index_path: str = "storage/bm25/index.sqlite3"
-    # The backend's own SQLite database: users, documents, chunks and jobs.
-    storage_path: str = "storage/researchlens.sqlite3"
 
     embedding_base_url: str | None = None
     embedding_api_key: str | None = None
     embedding_model: str | None = None
     embedding_dimension: int = 2048
-    # NVIDIA retrieval embedders need input_type (query/passage); "auto" sends it
-    # when the embedding URL is on nvidia.com.
-    embedding_input_type: Literal["auto", "on", "off"] = "auto"
 
     reranker_base_url: str | None = None
     reranker_api_key: str | None = None
     reranker_model: str | None = None
 
-    nebius_base_url: str = (
-        "https://api.tokenfactory.us-central1.nebius.com/v1/"
-    )
-    nebius_api_key: str | None = None
-    nebius_model: str | None = None
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_api_key: str | None = None
+    nvidia_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
 
-    top_k_dense: int = Field(default=25, ge=1, le=100)
-    top_k_sparse: int = Field(default=25, ge=1, le=100)
-    top_k_reranked: int = Field(default=8, ge=1, le=50)
-    max_context_tokens: int = Field(default=6000, ge=500)
-    min_relevance_score: float = Field(default=0.65, ge=0.0, le=1.0)
+    top_k_dense: int = Field(default=20, ge=1, le=100)
+    top_k_sparse: int = Field(default=20, ge=1, le=100)
+    top_k_reranked: int = Field(default=6, ge=1, le=50)
+    max_context_tokens: int = Field(default=4000, ge=500)
+    min_relevance_score: float = Field(default=0.35, ge=0.0, le=1.0)
     max_question_length: int = Field(default=4000, ge=100, le=20000)
     max_papers_per_query: int = Field(default=20, ge=1, le=100)
     use_fake_providers: bool | None = None
 
-    # Firebase Authentication. The service-account JSON is a secret: keep it out of
-    # git. When the path is unset, Google Application Default Credentials are used.
+    storage_path: str = "storage/data.sqlite3"
     firebase_credentials_path: str | None = None
     firebase_project_id: str | None = None
-
-    # Claim checks: paper search and open-access PDF downloads.
-    semantic_scholar_api_key: str | None = None
-    tavily_api_key: str | None = None
-    # Extra hosts (comma-separated) PDFs may be downloaded from.
-    download_allowed_hosts: str = ""
-
-    # Background work. The API runs as one process; jobs run inside it.
-    job_concurrency: int = Field(default=2, ge=1, le=16)
-    job_timeout_seconds: int = Field(default=180, ge=10)
-    check_timeout_seconds: int = Field(default=600, ge=30)
-    process_concurrency: int = Field(default=2, ge=1, le=16)
 
     model_config = SettingsConfigDict(
         env_file=(
@@ -80,6 +60,12 @@ class Settings(BaseSettings):
             raise ValueError("Fake providers are not allowed in production")
         if self.embedding_dimension < 1:
             raise ValueError("Embedding dimension must be positive")
+        # NVIDIA's embedding and chat endpoints commonly share one credential.
+        # Keep the separate setting available for deployments with distinct keys.
+        if not self.embedding_api_key:
+            self.embedding_api_key = self.nvidia_api_key
+        if not self.embedding_base_url:
+            self.embedding_base_url = self.nvidia_base_url
         return self
 
 

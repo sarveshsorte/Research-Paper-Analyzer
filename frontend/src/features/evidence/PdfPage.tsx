@@ -1,5 +1,5 @@
 // Loaded lazily: this module pulls in react-pdf and pdf.js.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import type { CustomTextRenderer } from 'react-pdf/dist/shared/types.js';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -36,6 +36,11 @@ export default function PdfPage({
   const file = useMemo(() => ({ data: data.slice() }), [data]);
   const [match, setMatch] = useState<QuoteMatch | null>(null);
 
+  // Reset highlight whenever the visible page or the target quote changes.
+  useEffect(() => {
+    setMatch(null);
+  }, [pageNumber, quote]);
+
   const ranges = useMemo(
     () => new Map((match?.ranges ?? []).map((range) => [range.item, range])),
     [match],
@@ -51,7 +56,12 @@ export default function PdfPage({
       options={OPTIONS}
       loading={null}
       error={null}
-      onLoadSuccess={(pdf) => onPageCount(pdf.numPages)}
+      onLoadSuccess={(pdf) => {
+        onPageCount(pdf.numPages);
+        if (pageNumber > pdf.numPages || pageNumber < 1) {
+          onError();
+        }
+      }}
       onLoadError={onError}
     >
       <Page
@@ -60,6 +70,9 @@ export default function PdfPage({
         width={width}
         renderAnnotationLayer={false}
         loading={null}
+        error={null}
+        onLoadError={onError}
+        onRenderError={onError}
         customTextRenderer={textRenderer}
         onGetTextSuccess={({ items }) => {
           const next = findQuote(

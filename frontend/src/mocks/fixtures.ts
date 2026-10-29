@@ -41,6 +41,9 @@ export const SOURCE_COUNTS: Record<SearchSource, { name: string; count: number }
   semantic_scholar: { name: 'Semantic Scholar', count: 14 },
   arxiv: { name: 'arXiv', count: 9 },
   tavily: { name: 'Tavily', count: 6 },
+  vector_dense: { name: 'Semantic Embeddings', count: 14 },
+  bm25_sparse: { name: 'Keyword Match', count: 9 },
+  uploaded_docs: { name: 'Uploaded PDFs', count: 6 },
 };
 
 export function checkResult(claim: string, sources: SearchSource[], now: string): CheckResult {
@@ -91,6 +94,24 @@ export function checkSteps(sources: SearchSource[]): JobStep[] {
       type: 'searching',
       message: 'Searched the web — 6 sources',
       via: 'tavily /search',
+      t: 3.1,
+    },
+    vector_dense: {
+      type: 'searching',
+      message: 'Searched indexed library — 14 results (dense)',
+      via: 'qdrant vector search',
+      t: 1.8,
+    },
+    bm25_sparse: {
+      type: 'searching',
+      message: 'Searched indexed library — 9 results (BM25)',
+      via: 'sqlite bm25',
+      t: 2.4,
+    },
+    uploaded_docs: {
+      type: 'searching',
+      message: 'Scanned 6 full uploaded PDFs',
+      via: 'full-text scan',
       t: 3.1,
     },
   };

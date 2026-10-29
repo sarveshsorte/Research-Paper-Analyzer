@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button';
+import { replayEntryAnimation } from '@/components/EntryAnimation';
 import { endSession, useSession } from './session';
 
-/** The account menu shows the active demo session or Firebase account and signs out. */
+/** The account menu in the header: shows the active demo session or Firebase account and signs out. */
 export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -68,6 +69,16 @@ export function AccountMenu() {
               ? (user.email ?? 'Signed in')
               : 'No account: your papers and checks stay in this browser tab.'}
           </p>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => {
+              setOpen(false);
+              replayEntryAnimation();
+            }}
+          >
+            Replay intro
+          </Button>
           <Button variant="secondary" fullWidth onClick={signOut}>
             Sign out
           </Button>

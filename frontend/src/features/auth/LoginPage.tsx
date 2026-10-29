@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate, type Location } from 'react-router-dom';
+import { Link, useLocation, useNavigate, type Location } from 'react-router-dom';
 import type { User } from 'firebase/auth';
-import { ApiError, apiFetch } from '@/api/client';
+import { apiFetch, ApiError } from '@/api/client';
 import { Button } from '@/components/Button';
 import { Logo } from '@/components/Logo';
 import { TextInput } from '@/components/TextInput';
@@ -13,7 +13,6 @@ import { startDemoSession, startFirebaseSession, type SessionUser } from './sess
 const WRONG_PASSWORD = 'That email and password don’t match an account.';
 const CANCELLED = 'Sign-in was cancelled.';
 
-/** Inline messages for Firebase error codes. */
 const SIGN_IN_ERRORS: Record<string, string> = {
   'claimlens/firebase-not-configured': 'Accounts aren’t set up here yet — use the live demo.',
   'auth/invalid-credential': WRONG_PASSWORD,
@@ -37,7 +36,7 @@ const SIGN_IN_ERRORS: Record<string, string> = {
 
 function signInErrorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
-  const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
+  const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code: unknown }).code : null;
   return (
     (typeof code === 'string' ? SIGN_IN_ERRORS[code] : undefined) ??
     'Sign-in failed. Try again, or use the live demo.'
@@ -49,7 +48,7 @@ function field(form: HTMLFormElement | null, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** /login (artboard "00 · Sign in"). Accounts use Firebase Authentication; the demo needs none. */
+/** /login: Accounts use Firebase Authentication; the demo needs no account. */
 export function LoginPage() {
   useDocumentTitle('Sign in');
   const navigate = useNavigate();
@@ -68,22 +67,22 @@ export function LoginPage() {
   };
 
   /** Signs in with Firebase, then has the API confirm the ID token before the session starts. */
-  const signIn = async (attempt: (firebase: typeof FirebaseAuth) => Promise<User>) => {
+  const signInWithFb = async (attempt: (firebase: typeof FirebaseAuth) => Promise<User>) => {
     setBusy(true);
     setNotice('');
     let firebase: typeof FirebaseAuth | undefined;
     try {
       firebase = await import('./firebase');
       const account = await attempt(firebase);
-      const { user } = await apiFetch<{ user: SessionUser }>('/auth/me', {
-        token: await account.getIdToken(),
-      });
+      const token = await account.getIdToken();
+      const { user } = await apiFetch<{ user: SessionUser }>('/auth/me', { token });
       startFirebaseSession(user);
       goOn();
     } catch (error) {
       // No app session, so no Firebase sign-in either.
       void firebase?.signOutOfFirebase().catch(() => undefined);
-      setNotice(signInErrorMessage(error));
+      const msg = signInErrorMessage(error);
+      if (msg) setNotice(msg);
       setBusy(false);
     }
   };
@@ -96,7 +95,7 @@ export function LoginPage() {
       setNotice('Enter your email and password.');
       return;
     }
-    void signIn((firebase) =>
+    void signInWithFb((firebase) =>
       creating
         ? firebase.createAccount(email, password)
         : firebase.signInWithEmail(email, password),
@@ -114,7 +113,8 @@ export function LoginPage() {
       await firebase.sendPasswordReset(email);
       setNotice(`If ${email} has an account, a reset link is on its way.`);
     } catch (error) {
-      setNotice(signInErrorMessage(error));
+      const msg = signInErrorMessage(error);
+      if (msg) setNotice(msg);
     }
   };
 
@@ -146,8 +146,8 @@ export function LoginPage() {
         </div>
         <p className="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[12px] text-muted-on-ink">
           <span>NVIDIA Nemotron 3</span>
-          <span>Nebius Token Factory</span>
-          <span>Semantic Scholar · arXiv · Tavily</span>
+          <span>Qdrant Vector Engine</span>
+          <span>Semantic Scholar · arXiv · PyMuPDF</span>
         </p>
       </section>
 
@@ -161,6 +161,12 @@ export function LoginPage() {
             <h1 className="sr-only">ClaimLens: don’t trust the claim, read the evidence.</h1>
           </div>
           <div className="flex flex-col gap-2">
+            <Link
+              to="/welcome"
+              className="self-start font-mono text-[12px] uppercase tracking-[0.5px] text-muted no-underline hover:text-ink hover:underline"
+            >
+              ← Back to Welcome
+            </Link>
             <p className="font-mono text-label uppercase text-muted">
               {creating ? 'Create account' : 'Sign in'}
             </p>
@@ -176,7 +182,7 @@ export function LoginPage() {
 
           <div className="flex items-center gap-3 font-mono text-[12px] text-muted">
             <span aria-hidden="true" className="h-px flex-1 bg-rule-dashed" />
-            or sign in
+            or {creating ? 'create an account' : 'sign in'}
             <span aria-hidden="true" className="h-px flex-1 bg-rule-dashed" />
           </div>
 
@@ -211,7 +217,7 @@ export function LoginPage() {
               variant="secondary"
               size="field"
               disabled={busy}
-              onClick={() => void signIn((firebase) => firebase.signInWithProvider('github'))}
+              onClick={() => void signInWithFb((fb) => fb.signInWithProvider('github'))}
             >
               Continue with GitHub
             </Button>
@@ -219,7 +225,7 @@ export function LoginPage() {
               variant="secondary"
               size="field"
               disabled={busy}
-              onClick={() => void signIn((firebase) => firebase.signInWithProvider('google'))}
+              onClick={() => void signInWithFb((fb) => fb.signInWithProvider('google'))}
             >
               Continue with Google
             </Button>

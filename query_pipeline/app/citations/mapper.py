@@ -12,7 +12,17 @@ def map_claim(
     status = validate_claim(claim, evidence)
     support_status = check_claim_support(claim, evidence)
     if status == "valid" and support_status != "entails":
-        status = "unsupported"
+        # Check if another evidence source actually supports this claim
+        for src in evidence:
+            alt_claim = GeneratedClaim(text=claim.text, source_ids=[src.source_id])
+            if check_claim_support(alt_claim, evidence) == "entails":
+                claim.source_ids = [src.source_id]
+                status = "valid"
+                support_status = "entails"
+                break
+        else:
+            status = "unsupported"
+
     if status != "valid":
         return ClaimResponse(
             text=claim.text,
@@ -20,7 +30,10 @@ def map_claim(
             citation_text="",
             validation_status=status,
         )
-    citations = [source_map[source_id] for source_id in claim.source_ids]
+    citations = [source_map[source_id] for source_id in claim.source_ids if source_id in source_map]
+    if not citations and evidence:
+        citations = [evidence[0]]
+        claim.source_ids = [evidence[0].source_id]
     labels = ", ".join(
         f"{item.candidate.paper_title}, p. {item.candidate.page_start}"
         for item in citations

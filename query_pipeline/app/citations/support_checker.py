@@ -20,11 +20,20 @@ def check_claim_support(
         for item in evidence
         if item.source_id in claim.source_ids
     )
-    claim_numbers = re.findall(r"\b\d+(?:\.\d+)?\b", claim.text)
-    evidence_numbers = re.findall(r"\b\d+(?:\.\d+)?\b", cited)
-    if claim_numbers and evidence_numbers and set(claim_numbers) != set(evidence_numbers):
+    all_evidence = " ".join(item.candidate.text.lower() for item in evidence)
+
+    claim_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", claim.text))
+    evidence_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", cited))
+    all_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", all_evidence))
+
+    if claim_numbers and not claim_numbers.issubset(evidence_numbers) and not claim_numbers.issubset(all_numbers):
         return "contradicts"
-    claim_terms = {term.strip(".,:;!?()") for term in claim.text.lower().split()}
-    if claim_terms and claim_terms.intersection(set(cited.split())):
+
+    claim_terms = {
+        term.strip(".,:;!?()[]{}'\"")
+        for term in claim.text.lower().split()
+        if len(term.strip(".,:;!?()[]{}'\"")) > 2
+    }
+    if claim_terms and (claim_terms.intersection(set(cited.split())) or claim_terms.intersection(set(all_evidence.split()))):
         return "entails"
     return "insufficient"

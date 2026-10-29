@@ -3,7 +3,13 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-ClaimType = Literal["fact", "comparison", "interpretation", "uncertainty"]
+ClaimType = Literal[
+    "fact",
+    "comparison",
+    "interpretation",
+    "uncertainty",
+    "definition",
+]
 
 
 class GeneratedClaim(BaseModel):
